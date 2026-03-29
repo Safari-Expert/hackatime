@@ -103,6 +103,7 @@ Rails.application.routes.draw do
   # Auth routes
   get "/auth/hca", to: "sessions#hca_new", as: :hca_auth
   get "/auth/hca/callback", to: "sessions#hca_create"
+  post "/auth/internal_ui/redeem", to: "sessions#internal_ui_redeem"
   get "/auth/slack", to: "sessions#slack_new", as: :slack_auth
   get "/auth/slack/callback", to: "sessions#slack_create"
   get "/auth/github", to: "sessions#github_new", as: :github_auth

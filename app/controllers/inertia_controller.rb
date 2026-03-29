@@ -31,7 +31,7 @@ class InertiaController < ApplicationController
       flash: inertia_flash_messages,
       user_present: current_user.present?,
       current_user: inertia_nav_current_user,
-      login_path: slack_auth_path,
+      login_path: Rails.configuration.x.safari_expert_self_hosted ? signin_path : slack_auth_path,
       links: inertia_primary_links,
       dev_links: inertia_dev_links,
       admin_links: inertia_admin_links,

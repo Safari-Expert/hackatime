@@ -1,4 +1,6 @@
 Rails.application.configure do
+  self_hosted = Rails.configuration.x.safari_expert_self_hosted
+
   config.good_job.preserve_job_records = true
   config.good_job.cleanup_preserved_jobs_before_seconds_ago = 60 * 60 * 24 * 7
   config.good_job.cleanup_interval_jobs = 1000
@@ -17,7 +19,7 @@ Rails.application.configure do
   # 12 threads total
   config.good_job.queues = "latency_critical:2; latency_10s:3; latency_5m,latency_10s:3; literally_whenever,*,latency_5m,latency_10s:4"
 
-  config.good_job.cron = {
+  cron = {
     # update_slack_status: {
     #   cron: "*/5 * * * *",
     #   class: "UserSlackStatusUpdateJob"
@@ -139,4 +141,15 @@ Rails.application.configure do
     #   description: "Remove leaderboards older than 2 days"
     # }
   }
+
+  if self_hosted
+    cron.except!(
+      :geocode_users_without_country,
+      :slack_username_update,
+      :weekly_summary_email,
+      :sync_stale_repo_metadata,
+    )
+  end
+
+  config.good_job.cron = cron
 end

@@ -11,6 +11,7 @@
     csrf_token,
     redirect_to,
     continue_param,
+    self_hosted,
   }: {
     hca_auth_path: string;
     slack_auth_path: string;
@@ -21,6 +22,7 @@
     csrf_token: string;
     redirect_to?: string;
     continue_param?: string | null;
+    self_hosted?: boolean;
   } = $props();
 
   let isSigningIn = $state(false);
@@ -44,6 +46,18 @@
           Dev: Open Link
         </a>
       {/if}
+    </div>
+  {:else if self_hosted}
+    <div
+      class="rounded-2xl border border-surface-200 bg-surface p-8 text-center space-y-3"
+    >
+      <p class="text-surface-content font-medium">
+        This deployment uses administrator-issued bootstrap sign-in links.
+      </p>
+      <p class="text-secondary text-sm leading-6">
+        Ask the Safari Expert operator for the current sign-in URL printed by
+        the bootstrap task.
+      </p>
     </div>
   {:else}
     <a

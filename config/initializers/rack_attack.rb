@@ -1,6 +1,8 @@
 # config/initializers/rack_attack.rb
 
 class Rack::Attack
+  self_hosted = Rails.configuration.x.safari_expert_self_hosted
+
   # kill switch in case you really wanna
   Rack::Attack.enabled = ENV.key?("RACK_ATTACK_ENABLED") ? ENV["RACK_ATTACK_ENABLED"] == "true" : Rails.env.production?
 
@@ -37,8 +39,10 @@ class Rack::Attack
     false
   end
 
-  Rack::Attack.blocklist("block non-cloudflare") do |req|
-    !req.cloudflare?
+  unless self_hosted
+    Rack::Attack.blocklist("block non-cloudflare") do |req|
+      !req.cloudflare?
+    end
   end
 
   Rack::Attack.throttle("admin abooze", limit: 5, period: 1.second) do |req|

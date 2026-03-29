@@ -45,7 +45,8 @@ class StaticPagesController < InertiaController
       show_dev_tool: Rails.env.development?,
       dev_magic_link: (Rails.env.development? ? session.delete(:dev_magic_link) : nil),
       csrf_token: form_authenticity_token,
-      continue_param: continue_param
+      continue_param: continue_param,
+      self_hosted: Rails.configuration.x.safari_expert_self_hosted
     }
   end
 
@@ -167,6 +168,7 @@ class StaticPagesController < InertiaController
       show_dev_tool: Rails.env.development?,
       dev_magic_link: (Rails.env.development? ? session.delete(:dev_magic_link) : nil),
       csrf_token: form_authenticity_token,
+      self_hosted: Rails.configuration.x.safari_expert_self_hosted,
       home_stats: @home_stats || {},
       flash: inertia_flash_messages
     }

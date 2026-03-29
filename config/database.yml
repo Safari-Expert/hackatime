@@ -55,8 +55,17 @@ production:
     adapter: postgresql
     encoding: unicode
     url: <%= ENV['DATABASE_URL'] %>
+<% if ENV["SAFARI_EXPERT_SELF_HOSTED"] == "true" %>
+  cable:
+    <<: *default
+    adapter: postgresql
+    encoding: unicode
+    url: <%= ENV['DATABASE_URL'] %>
+    migrations_paths: db/cable_migrate
+<% else %>
   cable:
     <<: *default
     adapter: sqlite3
     database: storage/production_cable.sqlite3
     migrations_paths: db/cable_migrate
+<% end %>

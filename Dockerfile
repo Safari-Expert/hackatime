@@ -95,6 +95,7 @@ USER 1000:1000
 # Entrypoint prepares the database.
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
-# Start either web server or job worker based on WORKER env var
+# Start the web server through a small wrapper so self-hosted deploys can
+# bypass Thruster when Railway healthchecks need direct Rails responses.
 EXPOSE 80
-CMD ["./bin/thrust", "./bin/rails", "server"]
+CMD ["./bin/start-web"]

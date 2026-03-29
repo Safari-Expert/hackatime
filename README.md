@@ -15,6 +15,10 @@
 
 Please read [DEVELOPMENT.md](DEVELOPMENT.md) for instructions on setting up and running the project locally.
 
+## Safari Expert self-host
+
+Safari Expert deploys this fork as a self-hosted Hackatime service on Railway. See [SELF_HOSTED.md](SELF_HOSTED.md) for the Railway service split, required environment variables, bootstrap task, and optional R2 storage configuration.
+
 ## Installer repo
 
 Looking for the installer code? It's over at [hackclub/hackatime-setup](https://github.com/hackclub/hackatime-setup).

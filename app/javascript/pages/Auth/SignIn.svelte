@@ -15,6 +15,7 @@
     dev_magic_link,
     csrf_token,
     continue_param,
+    self_hosted,
   }: {
     hca_auth_path: string;
     slack_auth_path: string;
@@ -24,6 +25,7 @@
     dev_magic_link?: string | null;
     csrf_token: string;
     continue_param?: string | null;
+    self_hosted?: boolean;
   } = $props();
 
   let previousTheme = $state<string | null>(null);
@@ -75,6 +77,7 @@
       {csrf_token}
       redirect_to="signin"
       {continue_param}
+      {self_hosted}
     />
 
     <div class="text-center">

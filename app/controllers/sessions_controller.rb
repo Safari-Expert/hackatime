@@ -1,4 +1,6 @@
 class SessionsController < ApplicationController
+  skip_forgery_protection only: :internal_ui_redeem
+
   def hca_new
     session[:return_data] = { "url" => safe_return_url(params[:continue].presence) } if params[:continue].present?
     Rails.logger.info("Sessions return data: #{session[:return_data]}")
@@ -278,6 +280,66 @@ class SessionsController < ApplicationController
     end
   end
 
+  def internal_ui_redeem
+    claims = InternalUiLaunchTokenService.new.decode!(
+      params[:launch_token],
+      audience: "hackatime"
+    )
+
+    unless claims.dig("hackatime", "launch")
+      render_internal_ui_launch_error(
+        "Launch not allowed",
+        "This account does not have Hackatime access.",
+        status: :forbidden
+      )
+      return
+    end
+
+    consumed = InternalUiLaunchRedemption.consume!(
+      jti: claims.fetch("jti"),
+      audience: claims.fetch("aud"),
+      github_uid: claims.fetch("sub"),
+      expires_at: Time.at(claims.fetch("exp")).utc
+    )
+
+    unless consumed
+      render_internal_ui_launch_error(
+        "Launch link already used",
+        "Return to Internal UI and open Hackatime again.",
+        status: :conflict
+      )
+      return
+    end
+
+    user = upsert_internal_ui_user!(claims)
+    apply_internal_ui_admin_level!(user, claims.dig("hackatime", "admin_level"))
+
+    session[:user_id] = user.id
+
+    redirect_to safe_return_url(claims["next"]).presence || root_path,
+                notice: "Successfully signed in from Internal UI!"
+  rescue InternalUiLaunchTokenService::ConfigurationError
+    render_internal_ui_launch_error(
+      "Launch unavailable",
+      "Hackatime trusted launch is not configured.",
+      status: :service_unavailable
+    )
+  rescue InternalUiLaunchTokenService::InvalidTokenError => e
+    Rails.logger.warn("Invalid Internal UI launch token: #{e.message}")
+    render_internal_ui_launch_error(
+      "Launch denied",
+      "The trusted launch token is invalid or expired.",
+      status: :unauthorized
+    )
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+    Rails.logger.error("Failed to redeem Internal UI launch: #{e.class} #{e.message}")
+    render_internal_ui_launch_error(
+      "Sign-in failed",
+      "Hackatime could not create the requested session.",
+      status: :unprocessable_entity
+    )
+  end
+
   def impersonate
     unless current_user && current_user.admin_level.in?([ "admin", "superadmin" ])
       redirect_to root_path, alert: "You are not authorized to impersonate users"
@@ -337,5 +399,81 @@ class SessionsController < ApplicationController
 
     report_message("#{provider} OAuth state mismatch")
     false
+  end
+
+  def upsert_internal_ui_user!(claims)
+    github_uid = claims.fetch("sub").to_s
+    email = claims.fetch("email").to_s.downcase
+    github_login = claims.fetch("github_login").to_s.strip.presence
+    avatar_url = claims["avatar_url"].to_s.strip.presence
+
+    user = User.find_by(github_uid: github_uid)
+    user ||= EmailAddress.find_by(email: email)&.user
+    user ||= User.new
+
+    if user.new_record?
+      username = resolve_internal_ui_username(github_login)
+      user.username = username if username.present?
+    end
+
+    user.github_uid = github_uid
+    user.github_username = github_login if github_login.present?
+    user.github_avatar_url = avatar_url if avatar_url.present?
+    user.save!
+
+    attach_internal_ui_email!(user, email) if email.present?
+    user
+  end
+
+  def resolve_internal_ui_username(candidate)
+    return nil if candidate.blank?
+
+    existing_user = User.find_by("LOWER(username) = ?", candidate.downcase)
+    return candidate unless existing_user
+
+    nil
+  end
+
+  def attach_internal_ui_email!(user, email)
+    email_record = EmailAddress.find_by(email: email)
+    if email_record && email_record.user_id != user.id
+      Rails.logger.warn(
+        "Internal UI launch email #{email} belongs to User ##{email_record.user_id}; " \
+        "keeping existing ownership while signing in User ##{user.id}"
+      )
+      return
+    end
+
+    email_record ||= user.email_addresses.build(email: email)
+    email_record.user = user
+    email_record.source = :github
+    email_record.save! if email_record.new_record? || email_record.changed?
+  end
+
+  def apply_internal_ui_admin_level!(user, requested_level)
+    normalized_level = requested_level.to_s.presence
+    return if normalized_level.blank?
+    return unless User.admin_levels.key?(normalized_level)
+
+    user.set_admin_level(normalized_level)
+  end
+
+  def render_internal_ui_launch_error(title, message, status:)
+    render html: <<~HTML.html_safe, status: status
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>#{ERB::Util.html_escape(title)}</title>
+        </head>
+        <body>
+          <main style="font-family: system-ui, sans-serif; max-width: 28rem; margin: 12vh auto; padding: 2rem; border: 1px solid #d4d4d8; border-radius: 1rem;">
+            <h1 style="margin: 0 0 0.75rem;">#{ERB::Util.html_escape(title)}</h1>
+            <p style="margin: 0; color: #52525b;">#{ERB::Util.html_escape(message)}</p>
+          </main>
+        </body>
+      </html>
+    HTML
   end
 end

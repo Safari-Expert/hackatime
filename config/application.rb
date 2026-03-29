@@ -25,6 +25,9 @@ module Harbor
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
     # Common ones are `templates`, `generators`, or `middleware`, for example.
     config.autoload_lib(ignore: %w[assets tasks])
+    config.x.safari_expert_self_hosted = ActiveModel::Type::Boolean.new.cast(
+      ENV["SAFARI_EXPERT_SELF_HOSTED"]
+    )
 
     # Configuration for the application, engines, and railties goes here.
     #

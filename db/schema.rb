@@ -13,7 +13,9 @@
 ActiveRecord::Schema[8.1].define(version: 2026_03_22_180603) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
-  enable_extension "pg_stat_statements"
+  # Self-hosted Railway app users should not need elevated privileges just to load
+  # the baseline schema in development.
+  enable_extension "pg_stat_statements" unless ENV["SAFARI_EXPERT_SELF_HOSTED"] == "true"
 
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
