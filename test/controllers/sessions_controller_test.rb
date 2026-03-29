@@ -6,6 +6,42 @@ class SessionsControllerTest < ActionDispatch::IntegrationTest
     ActiveRecord::FixtureSet.reset_cache
   end
 
+  def with_internal_ui_secret(secret)
+    original = ENV["HACKATIME_INTERNAL_UI_LAUNCH_SHARED_SECRET"]
+    ENV["HACKATIME_INTERNAL_UI_LAUNCH_SHARED_SECRET"] = secret
+    yield
+  ensure
+    ENV["HACKATIME_INTERNAL_UI_LAUNCH_SHARED_SECRET"] = original
+  end
+
+  def build_internal_ui_launch_token(secret, exp: 10.minutes.from_now.to_i, launch: true)
+    header = base64url_json({ alg: "HS256", typ: "JWT" })
+    payload = base64url_json(
+      iss: "internal_ui",
+      aud: "hackatime",
+      sub: "123",
+      github_login: "alexb",
+      email: "alexb@example.com",
+      jti: SecureRandom.uuid,
+      exp: exp,
+      hackatime: {
+        launch: launch,
+        admin_level: "viewer"
+      },
+      next: "/projects"
+    )
+    signing_input = "#{header}.#{payload}"
+    signature = Base64.urlsafe_encode64(
+      OpenSSL::HMAC.digest("SHA256", secret, signing_input),
+      padding: false
+    )
+    "#{signing_input}.#{signature}"
+  end
+
+  def base64url_json(payload)
+    Base64.urlsafe_encode64(payload.to_json, padding: false)
+  end
+
   # -- HCA: hca_new stores continue in session --
 
   test "hca_new stores continue path for oauth authorize" do
@@ -297,5 +333,55 @@ class SessionsControllerTest < ActionDispatch::IntegrationTest
     assert_redirected_to root_path
     assert_equal admin.id, session[:user_id]
     assert_nil session[:impersonater_user_id]
+  end
+
+  test "internal_ui_redeem signs in the user and redirects" do
+    secret = "shared-secret"
+    token = build_internal_ui_launch_token(secret)
+
+    with_internal_ui_secret(secret) do
+      post "/auth/internal_ui/redeem", params: { launch_token: token }
+
+      assert_response :redirect
+      assert_redirected_to "/projects"
+      assert session[:user_id].present?
+    end
+  end
+
+  test "internal_ui_redeem rejects replayed token" do
+    secret = "shared-secret"
+    token = build_internal_ui_launch_token(secret)
+
+    with_internal_ui_secret(secret) do
+      post "/auth/internal_ui/redeem", params: { launch_token: token }
+      assert_response :redirect
+
+      post "/auth/internal_ui/redeem", params: { launch_token: token }
+      assert_response :conflict
+      assert_includes response.body, "Launch link already used"
+    end
+  end
+
+  test "internal_ui_redeem rejects when launch is disabled" do
+    secret = "shared-secret"
+    token = build_internal_ui_launch_token(secret, launch: false)
+
+    with_internal_ui_secret(secret) do
+      post "/auth/internal_ui/redeem", params: { launch_token: token }
+
+      assert_response :forbidden
+      assert_includes response.body, "Launch not allowed"
+    end
+  end
+
+  test "internal_ui_redeem rejects when secret is missing" do
+    token = build_internal_ui_launch_token("shared-secret")
+
+    with_internal_ui_secret("") do
+      post "/auth/internal_ui/redeem", params: { launch_token: token }
+
+      assert_response :service_unavailable
+      assert_includes response.body, "Launch unavailable"
+    end
   end
 end
