@@ -867,13 +867,7 @@
   .monitoring-grid {
     display: grid;
     gap: 1.25rem;
-  }
-
-  @media (min-width: 1200px) {
-    .monitoring-grid {
-      grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr);
-      align-items: start;
-    }
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .summary-card {
