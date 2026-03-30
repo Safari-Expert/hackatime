@@ -53,6 +53,8 @@ Rails.application.routes.draw do
 
   constraints AdminLevelConstraint.new(:superadmin, :admin, :viewer) do
     namespace :admin do
+      get "employee_monitoring", to: "employee_monitoring#show", as: :employee_monitoring
+      patch "employee_monitoring/users/:id/profile", to: "employee_monitoring#update_profile", as: :employee_monitoring_user_profile
       get "timeline", to: "timeline#show", as: :timeline
       get "timeline/search_users", to: "timeline#search_users"
       get "timeline/leaderboard_users", to: "timeline#leaderboard_users"
@@ -244,6 +246,10 @@ Rails.application.routes.draw do
     namespace :admin do
       namespace :v1 do
         get "check", to: "admin#check"
+        get "employee_monitoring/summary", to: "employee_monitoring#summary"
+        get "employee_monitoring/overview", to: "employee_monitoring#overview"
+        get "employee_monitoring/users/:id", to: "employee_monitoring#show_user"
+        patch "employee_monitoring/users/:id/profile", to: "employee_monitoring#update_profile"
         get "user/info", to: "admin#user_info"
         get "user/info_batch", to: "admin#user_info_batch"
         get "user/heartbeats", to: "admin#user_heartbeats"

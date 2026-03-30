@@ -114,6 +114,9 @@ class User < ApplicationRecord
   has_many :email_verification_requests, dependent: :destroy
   has_many :sign_in_tokens, dependent: :destroy
   has_many :project_repo_mappings
+  has_one :employee_monitoring_profile, dependent: :destroy
+  has_many :employee_monitoring_daily_rollups, dependent: :destroy
+  has_many :employee_monitoring_interval_snapshots, dependent: :destroy
 
   has_many :api_keys
   has_many :admin_api_keys, dependent: :destroy

@@ -111,6 +111,11 @@ Rails.application.configure do
       class: "Cache::HeartbeatCountsJob",
       kwargs: { force_reload: true }
     },
+    employee_monitoring_rollup: {
+      cron: "*/5 * * * *",
+      class: "SafariExpert::EmployeeMonitoring::RollupJob",
+      description: "Refreshes employee monitoring rollups and 5-minute interval snapshots."
+    },
     weekly_summary_email: {
       cron: "30 18 * * 0",
       class: "WeeklySummaryEmailJob",

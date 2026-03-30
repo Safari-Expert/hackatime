@@ -162,7 +162,7 @@
     <% if include_vite_assets %>
       <%= vite_stylesheet_tag "application" %>
     <% end %>
-    <%= stylesheet_link_tag 'tailwind', 'data-turbo-track': 'reload' %>
+    <%= safe_stylesheet_link_tag 'tailwind', 'data-turbo-track': 'reload' %>
     <% if include_vite_assets %>
       <%= vite_client_tag %>
       <%= vite_typescript_tag "inertia" %>

@@ -10,7 +10,7 @@ class InertiaController < ApplicationController
       nav: inertia_nav_props,
       footer: inertia_footer_props,
       theme: inertia_theme_props,
-      # currently_hacking: currently_hacking_props,
+      currently_hacking: currently_hacking_props,
       csrf_token: form_authenticity_token,
       signout_path: signout_path,
       show_stop_impersonating: session[:impersonater_user_id].present?,
@@ -95,6 +95,7 @@ class InertiaController < ApplicationController
     return [] unless current_user&.admin_level.in?(%w[admin superadmin])
 
     links = []
+    links << inertia_link("Employee Monitoring", admin_employee_monitoring_path, active: helpers.current_page?(admin_employee_monitoring_path) || request.path.start_with?("/admin/employee_monitoring"))
     links << inertia_link("Review Timeline", admin_timeline_path, active: helpers.current_page?(admin_timeline_path))
     links << inertia_link("Trust Level Logs", admin_trust_level_audit_logs_path, active: helpers.current_page?(admin_trust_level_audit_logs_path) || request.path.start_with?("/admin/trust_level_audit_logs"))
     links << inertia_link("Admin API Keys", admin_admin_api_keys_path, active: helpers.current_page?(admin_admin_api_keys_path) || request.path.start_with?("/admin/admin_api_keys"))
@@ -105,6 +106,7 @@ class InertiaController < ApplicationController
     return [] unless current_user&.admin_level == "viewer"
 
     [
+      inertia_link("Employee Monitoring", admin_employee_monitoring_path, active: helpers.current_page?(admin_employee_monitoring_path) || request.path.start_with?("/admin/employee_monitoring")),
       inertia_link("Review Timeline", admin_timeline_path, active: helpers.current_page?(admin_timeline_path)),
       inertia_link("Trust Level Logs", admin_trust_level_audit_logs_path, active: helpers.current_page?(admin_trust_level_audit_logs_path) || request.path.start_with?("/admin/trust_level_audit_logs")),
       inertia_link("Admin API Keys", admin_admin_api_keys_path, active: helpers.current_page?(admin_admin_api_keys_path) || request.path.start_with?("/admin/admin_api_keys"))

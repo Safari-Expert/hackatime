@@ -13,7 +13,7 @@
 
     <%= favicon_link_tag asset_path('favicon.png'), type: 'image/png' %>
     <%= stylesheet_link_tag :app %>
-    <%= stylesheet_link_tag 'tailwind', 'data-turbo-track': 'reload' %>
+    <%= safe_stylesheet_link_tag 'tailwind', 'data-turbo-track': 'reload' %>
   </head>
 
   <body class="bg-surface">

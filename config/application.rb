@@ -25,6 +25,15 @@ module Harbor
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
     # Common ones are `templates`, `generators`, or `middleware`, for example.
     config.autoload_lib(ignore: %w[assets tasks])
+    [
+      Rails.root.join("safari_expert/employee_monitoring/app/controllers"),
+      Rails.root.join("safari_expert/employee_monitoring/app/models"),
+      Rails.root.join("safari_expert/employee_monitoring/app/services"),
+      Rails.root.join("safari_expert/employee_monitoring/app/jobs"),
+    ].each do |path|
+      config.autoload_paths << path
+      config.eager_load_paths << path
+    end
     config.x.safari_expert_self_hosted = ActiveModel::Type::Boolean.new.cast(
       ENV["SAFARI_EXPERT_SELF_HOSTED"]
     )

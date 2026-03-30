@@ -15,7 +15,7 @@ createInertiaApp({
   resolve: (name) => {
     const component = pages[`../pages/${name}.svelte`];
     if (!component) {
-      console.error(`Missing Inertia page component: '${name}.svelte'`);
+      throw new Error(`Missing Inertia page component: '${name}.svelte'`);
     }
 
     const layout =

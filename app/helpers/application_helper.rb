@@ -215,4 +215,10 @@ module ApplicationHelper
   rescue StandardError
     fallback.present? ? asset_path(fallback) : asset_name
   end
+
+  def safe_stylesheet_link_tag(source, **options)
+    stylesheet_link_tag(source, **options)
+  rescue StandardError
+    nil
+  end
 end
