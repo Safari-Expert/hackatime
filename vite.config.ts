@@ -9,12 +9,24 @@ const rootDir = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   resolve: {
-    alias: {
-      '@inertiajs/svelte': resolve(rootDir, 'vendor/inertia/packages/svelte/dist/index.js'),
-      '@inertiajs/svelte/server': resolve(rootDir, 'vendor/inertia/packages/svelte/dist/server.js'),
-      '@inertiajs/core': resolve(rootDir, 'vendor/inertia/packages/core/dist/index.js'),
-      '@inertiajs/core/server': resolve(rootDir, 'vendor/inertia/packages/core/dist/server.js'),
-    },
+    alias: [
+      {
+        find: /^@inertiajs\/svelte\/server$/,
+        replacement: resolve(rootDir, 'vendor/inertia/packages/svelte/dist/server.js'),
+      },
+      {
+        find: /^@inertiajs\/svelte$/,
+        replacement: resolve(rootDir, 'vendor/inertia/packages/svelte/dist/index.js'),
+      },
+      {
+        find: /^@inertiajs\/core\/server$/,
+        replacement: resolve(rootDir, 'vendor/inertia/packages/core/dist/server.js'),
+      },
+      {
+        find: /^@inertiajs\/core$/,
+        replacement: resolve(rootDir, 'vendor/inertia/packages/core/dist/index.js'),
+      },
+    ],
     conditions: [
       'svelte',
       'browser',
