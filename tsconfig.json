@@ -20,7 +20,11 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["app/javascript/*"],
-      "~/*": ["app/javascript/*"]
+      "~/*": ["app/javascript/*"],
+      "@inertiajs/svelte": ["vendor/inertia/packages/svelte/dist/index.d.ts"],
+      "@inertiajs/svelte/server": ["vendor/inertia/packages/svelte/dist/server.d.ts"],
+      "@inertiajs/core": ["vendor/inertia/packages/core/types/index.d.ts"],
+      "@inertiajs/core/server": ["vendor/inertia/packages/core/types/server.d.ts"]
     }
   },
 

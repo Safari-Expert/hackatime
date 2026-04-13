@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_04_13_120000) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_13_183746) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
   enable_extension "pg_stat_statements"
@@ -195,6 +195,29 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_13_120000) do
     t.bigint "user_id", null: false
     t.integer "workdays", default: [1, 2, 3, 4, 5], null: false, array: true
     t.index ["user_id"], name: "index_employee_monitoring_profiles_on_user_id", unique: true
+  end
+
+  create_table "employee_monitoring_schedule_days", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "expected_end_minute_local", null: false
+    t.integer "expected_start_minute_local", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.integer "weekday", null: false
+    t.index ["user_id", "weekday"], name: "index_employee_monitoring_schedule_days_on_user_and_weekday", unique: true
+    t.index ["user_id"], name: "index_employee_monitoring_schedule_days_on_user_id"
+  end
+
+  create_table "external_work_sessions", force: :cascade do |t|
+    t.integer "close_reason"
+    t.datetime "created_at", null: false
+    t.datetime "ended_at"
+    t.datetime "started_at", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["user_id", "started_at"], name: "index_external_work_sessions_on_user_and_started_at"
+    t.index ["user_id"], name: "index_external_work_sessions_on_open_user", unique: true, where: "(ended_at IS NULL)"
+    t.index ["user_id"], name: "index_external_work_sessions_on_user_id"
   end
 
   create_table "flipper_features", force: :cascade do |t|
@@ -683,6 +706,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_13_120000) do
   end
 
   create_table "users", force: :cascade do |t|
+    t.integer "account_kind", default: 0, null: false
     t.integer "admin_level", default: 0, null: false
     t.boolean "allow_public_stats_lookup", default: true, null: false
     t.string "country_code"
@@ -698,6 +722,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_13_120000) do
     t.string "hca_access_token"
     t.string "hca_id"
     t.string "hca_scopes", default: [], array: true
+    t.string "password_digest"
     t.text "profile_bio"
     t.string "profile_bluesky_url"
     t.string "profile_discord_url"
@@ -766,6 +791,8 @@ ActiveRecord::Schema[8.1].define(version: 2026_04_13_120000) do
   add_foreign_key "employee_monitoring_daily_rollups", "users"
   add_foreign_key "employee_monitoring_interval_snapshots", "users"
   add_foreign_key "employee_monitoring_profiles", "users"
+  add_foreign_key "employee_monitoring_schedule_days", "users"
+  add_foreign_key "external_work_sessions", "users"
   add_foreign_key "goals", "users"
   add_foreign_key "heartbeat_import_runs", "users"
   add_foreign_key "heartbeat_import_sources", "users"

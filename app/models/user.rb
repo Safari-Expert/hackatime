@@ -26,9 +26,14 @@ class User < ApplicationRecord
     uniqueness: { case_sensitive: false, message: "has already been taken" },
     allow_nil: true
   validate :username_must_be_visible
+  validate :external_username_required
+  validate :external_password_digest_required
+  validate :external_password_length
 
   attribute :allow_public_stats_lookup, :boolean, default: true
   attribute :default_timezone_leaderboard, :boolean, default: true
+
+  has_secure_password validations: false
 
   def country_name
     ISO3166::Country.new(country_code).common_name
@@ -64,6 +69,11 @@ class User < ApplicationRecord
     rose: 8,
     rose_pine_dawn: 9
   }
+
+  enum :account_kind, {
+    standard: 0,
+    external: 1
+  }, prefix: true
 
   def can_convict_users?
     admin_level_superadmin?
@@ -115,8 +125,10 @@ class User < ApplicationRecord
   has_many :sign_in_tokens, dependent: :destroy
   has_many :project_repo_mappings
   has_one :employee_monitoring_profile, dependent: :destroy
+  has_many :employee_monitoring_schedule_days, dependent: :destroy
   has_many :employee_monitoring_daily_rollups, dependent: :destroy
   has_many :employee_monitoring_interval_snapshots, dependent: :destroy
+  has_many :external_work_sessions, dependent: :destroy
 
   has_many :api_keys
   has_many :admin_api_keys, dependent: :destroy
@@ -146,6 +158,7 @@ class User < ApplicationRecord
       )
       .distinct
   }
+  scope :external_accounts, -> { where(account_kind: :external) }
 
   has_many :trust_level_audit_logs, dependent: :destroy
   has_many :trust_level_changes_made, class_name: "TrustLevelAuditLog", foreign_key: "changed_by_id", dependent: :destroy
@@ -272,6 +285,10 @@ class User < ApplicationRecord
   end
 
   def display_name
+    if account_kind_external? && display_name_override.present?
+      return display_name_override
+    end
+
     name = slack_username || github_username || username
     return name if name.present?
 
@@ -337,5 +354,23 @@ class User < ApplicationRecord
     if instance_variable_defined?(:@username_cleared_for_invisible) && @username_cleared_for_invisible
       errors.add(:username, "must include visible characters")
     end
+  end
+
+  def external_username_required
+    return unless account_kind_external? && username.blank?
+
+    errors.add(:username, "can't be blank")
+  end
+
+  def external_password_digest_required
+    return unless account_kind_external? && password_digest.blank?
+
+    errors.add(:password, "can't be blank")
+  end
+
+  def external_password_length
+    return unless account_kind_external? && password.present? && password.length < 8
+
+    errors.add(:password, "is too short (minimum is 8 characters)")
   end
 end
