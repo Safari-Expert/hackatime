@@ -42,6 +42,7 @@ class Settings::BaseController < InertiaController
         badges: my_settings_badges_path,
         data: my_settings_data_path
       },
+      sidebar_link_groups: settings_sidebar_link_groups,
       page_title: (is_own ? "My Settings" : "Settings | #{@user.display_name}"),
       heading: (is_own ? "Settings" : "Settings for #{@user.display_name}"),
       subheading: "Manage your profile, integrations, notifications, access, goals, and data tools.",
@@ -56,6 +57,38 @@ class Settings::BaseController < InertiaController
   # Subclasses override this to provide section-specific props
   def section_props
     {}
+  end
+
+  def settings_sidebar_link_groups
+    groups = [
+      {
+        title: "Resources",
+        items: [
+          { label: "Docs", href: docs_path, inertia: true },
+          { label: "Extensions", href: extensions_path, inertia: true },
+          { label: "My OAuth Apps", href: oauth_applications_path, inertia: true }
+        ]
+      }
+    ]
+
+    admin_items = []
+
+    if current_user&.admin_level.in?(%w[viewer admin superadmin])
+      admin_items << { label: "Admin API Keys", href: admin_admin_api_keys_path }
+    end
+
+    if current_user&.admin_level == "superadmin"
+      admin_items << { label: "Admin Management", href: admin_admin_users_path }
+      pending_count = DeletionRequest.pending.count
+      admin_items << {
+        label: "Account Deletions",
+        href: admin_deletion_requests_path,
+        badge: pending_count.positive? ? pending_count : nil
+      }
+    end
+
+    groups << { title: "Admin", items: admin_items } if admin_items.any?
+    groups
   end
 
   # Shared helpers used by multiple section controllers

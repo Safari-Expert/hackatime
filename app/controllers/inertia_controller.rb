@@ -64,15 +64,17 @@ class InertiaController < ApplicationController
 
   def inertia_primary_links
     links = []
-    links << inertia_link("Home", root_path, active: helpers.current_page?(root_path), inertia: true)
+    if current_user
+      links << inertia_link("Employee Monitoring", employee_monitoring_path, active: employee_monitoring_active?, inertia: true)
+    else
+      links << inertia_link("Home", root_path, active: helpers.current_page?(root_path), inertia: true)
+    end
+
     links << inertia_link("Leaderboards", leaderboards_path, active: helpers.current_page?(leaderboards_path))
 
     if current_user
       links << inertia_link("Projects", my_projects_path, active: request.path.start_with?("/my/projects"), inertia: true)
-      links << inertia_link("Docs", docs_path, active: helpers.current_page?(docs_path) || request.path.start_with?("/docs"), inertia: true)
-      links << inertia_link("Extensions", extensions_path, active: helpers.current_page?(extensions_path), inertia: true)
       links << inertia_link("Settings", my_settings_path, active: request.path.start_with?("/my/settings"), inertia: true)
-      links << inertia_link("My OAuth Apps", oauth_applications_path, active: helpers.current_page?(oauth_applications_path) || request.path.start_with?("/oauth/applications"), inertia: true)
       links << { label: "Logout", action: "logout" }
     else
       links << inertia_link("Docs", docs_path, active: helpers.current_page?(docs_path) || request.path.start_with?("/docs"), inertia: true)
@@ -95,10 +97,7 @@ class InertiaController < ApplicationController
     return [] unless current_user&.admin_level.in?(%w[admin superadmin])
 
     links = []
-    links << inertia_link("Employee Monitoring", admin_employee_monitoring_path, active: helpers.current_page?(admin_employee_monitoring_path) || request.path.start_with?("/admin/employee_monitoring"))
     links << inertia_link("Review Timeline", admin_timeline_path, active: helpers.current_page?(admin_timeline_path))
-    links << inertia_link("Trust Level Logs", admin_trust_level_audit_logs_path, active: helpers.current_page?(admin_trust_level_audit_logs_path) || request.path.start_with?("/admin/trust_level_audit_logs"))
-    links << inertia_link("Admin API Keys", admin_admin_api_keys_path, active: helpers.current_page?(admin_admin_api_keys_path) || request.path.start_with?("/admin/admin_api_keys"))
     links
   end
 
@@ -106,10 +105,7 @@ class InertiaController < ApplicationController
     return [] unless current_user&.admin_level == "viewer"
 
     [
-      inertia_link("Employee Monitoring", admin_employee_monitoring_path, active: helpers.current_page?(admin_employee_monitoring_path) || request.path.start_with?("/admin/employee_monitoring")),
-      inertia_link("Review Timeline", admin_timeline_path, active: helpers.current_page?(admin_timeline_path)),
-      inertia_link("Trust Level Logs", admin_trust_level_audit_logs_path, active: helpers.current_page?(admin_trust_level_audit_logs_path) || request.path.start_with?("/admin/trust_level_audit_logs")),
-      inertia_link("Admin API Keys", admin_admin_api_keys_path, active: helpers.current_page?(admin_admin_api_keys_path) || request.path.start_with?("/admin/admin_api_keys"))
+      inertia_link("Review Timeline", admin_timeline_path, active: helpers.current_page?(admin_timeline_path))
     ]
   end
 
@@ -117,13 +113,15 @@ class InertiaController < ApplicationController
     return [] unless current_user&.admin_level == "superadmin"
 
     links = []
-    links << inertia_link("Admin Management", admin_admin_users_path, active: helpers.current_page?(admin_admin_users_path))
-    pending_count = DeletionRequest.pending.count
-    links << inertia_link("Account Deletions", admin_deletion_requests_path, active: helpers.current_page?(admin_deletion_requests_path), badge: pending_count.positive? ? pending_count : nil)
     links << inertia_link("GoodBoy", good_job_path, active: helpers.current_page?(good_job_path))
-    links << inertia_link("All OAuth Apps", admin_oauth_applications_path, active: helpers.current_page?(admin_oauth_applications_path) || request.path.start_with?("/admin/oauth_applications"))
-    links << inertia_link("Feature Flags", flipper_path, active: helpers.current_page?(flipper_path))
     links
+  end
+
+  def employee_monitoring_active?
+    helpers.current_page?(employee_monitoring_path) ||
+      helpers.current_page?(admin_employee_monitoring_path) ||
+      request.path.start_with?("/employee_monitoring") ||
+      request.path.start_with?("/admin/employee_monitoring")
   end
 
   def inertia_link(label, href, active: false, badge: nil, inertia: false)

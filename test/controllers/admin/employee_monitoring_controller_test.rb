@@ -5,6 +5,7 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
     @search_term = "employee-monitoring-controller-spec"
     @viewer = User.create!(timezone: "UTC", admin_level: "viewer", github_username: "viewer-user")
     @admin = User.create!(timezone: "UTC", admin_level: "admin", github_username: "admin-user")
+    @regular_user = User.create!(timezone: "UTC", github_username: "regular-user")
     @monitored = User.create!(timezone: "UTC", github_username: "#{@search_term}-monitored")
     @monitored.create_employee_monitoring_profile!
     Heartbeat.create!(
@@ -22,7 +23,7 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders the employee monitoring page for viewers" do
-    get admin_employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+    get employee_monitoring_path(user_id: @monitored.id, search: @search_term)
 
     assert_response :success
     assert_inertia_component "SafariExpert/EmployeeMonitoring/Index"
@@ -37,6 +38,24 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
     assert_not_nil inertia_page.dig("props", "selected_user", "schedule", "label")
   end
 
+  test "renders the employee monitoring page read-only for regular users" do
+    sign_in_as(@regular_user)
+
+    get employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+
+    assert_response :success
+    assert_inertia_component "SafariExpert/EmployeeMonitoring/Index"
+    assert_equal false, inertia_page.dig("props", "can_edit_schedule")
+    assert_equal @monitored.id, inertia_page.dig("props", "selected_user", "id")
+  end
+
+  test "legacy admin path redirects to the canonical employee monitoring path" do
+    get admin_employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+
+    assert_response :redirect
+    assert_redirected_to employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+  end
+
   test "prevents viewers from updating schedules" do
     patch admin_employee_monitoring_user_profile_path(id: @monitored.id), params: {
       profile: {
@@ -44,7 +63,20 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_redirected_to admin_employee_monitoring_path(user_id: @monitored.id)
+    assert_redirected_to employee_monitoring_path(user_id: @monitored.id)
+    assert_nil @monitored.employee_monitoring_profile.reload.timezone_override
+  end
+
+  test "prevents regular users from updating schedules" do
+    sign_in_as(@regular_user)
+
+    patch admin_employee_monitoring_user_profile_path(id: @monitored.id), params: {
+      profile: {
+        timezone_override: "Africa/Nairobi"
+      }
+    }
+
+    assert_response :not_found
     assert_nil @monitored.employee_monitoring_profile.reload.timezone_override
   end
 
@@ -62,7 +94,7 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
       }
     }
 
-    assert_redirected_to admin_employee_monitoring_path(user_id: @monitored.id)
+    assert_redirected_to employee_monitoring_path(user_id: @monitored.id)
     profile = @monitored.employee_monitoring_profile.reload
     assert_equal "Africa/Nairobi", profile.timezone_override
     assert_equal 510, profile.expected_start_minute_local

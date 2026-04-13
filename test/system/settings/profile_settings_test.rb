@@ -84,4 +84,35 @@ class ProfileSettingsTest < ApplicationSystemTestCase
     assert_text "Settings updated successfully"
     assert_equal "neon", @user.reload.theme
   end
+
+  test "settings sidebar shows moved resource links for regular users" do
+    visit my_settings_profile_path
+
+    within "[data-settings-sidebar]" do
+      assert_text "Resources"
+      assert_link "Docs"
+      assert_link "Extensions"
+      assert_link "My OAuth Apps"
+      assert_no_text "Admin"
+    end
+  end
+
+  test "settings sidebar shows moved admin links for superadmins" do
+    superadmin = User.create!(timezone: "UTC", admin_level: "superadmin", username: "profile-superadmin")
+    DeletionRequest.create_for_user!(User.create!(timezone: "UTC", username: "pending-review"))
+
+    sign_in_as(superadmin)
+    visit my_settings_profile_path
+
+    within "[data-settings-sidebar]" do
+      assert_text "Admin"
+      assert_link "Admin API Keys"
+      assert_link "Admin Management"
+      assert_link "Account Deletions"
+      assert_text "1"
+      assert_no_link "Feature Flags"
+      assert_no_link "All OAuth Apps"
+      assert_no_link "Trust Level Logs"
+    end
+  end
 end

@@ -9,6 +9,7 @@
   let {
     active_section,
     section_paths,
+    sidebar_link_groups,
     page_title,
     heading,
     subheading,
@@ -35,6 +36,7 @@
 <SettingsShell
   {active_section}
   {section_paths}
+  {sidebar_link_groups}
   {page_title}
   {heading}
   {subheading}

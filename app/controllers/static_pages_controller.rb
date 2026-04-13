@@ -5,23 +5,7 @@ class StaticPagesController < InertiaController
 
   def index
     if current_user
-      flavor_texts = FlavorText.motto + FlavorText.conditional_mottos(current_user)
-      flavor_texts += FlavorText.rare_motto if Random.rand(10) < 1
-      @flavor_text = flavor_texts.sample
-
-      if params[:date].present?
-        d = Date.parse(params[:date]) rescue nil
-        return redirect_to "/my/projects?interval=custom&from=#{d}&to=#{d}" if d
-      end
-
-      if !current_user.heartbeats.exists? || params[:show_wakatime_setup_notice]
-        @show_wakatime_setup_notice = true
-        if (ssp = Cache::SetupSocialProofJob.perform_now)
-          @ssp_message, @ssp_users_recent, @ssp_users_size = ssp.values_at(:message, :users_recent, :users_size)
-        end
-      end
-
-      render inertia: "Home/SignedIn", props: signed_in_props
+      redirect_to employee_monitoring_path
     else
       # Set homepage SEO content for logged-out users only
       set_homepage_seo_content

@@ -9,6 +9,7 @@
   let {
     active_section,
     section_paths,
+    sidebar_link_groups,
     page_title,
     heading,
     subheading,
@@ -34,6 +35,9 @@
         ? "border-surface-300 bg-surface-100 text-surface-content shadow-[0_1px_0_rgba(255,255,255,0.02)]"
         : "border-transparent bg-transparent text-muted hover:border-surface-200 hover:bg-surface-100/60 hover:text-surface-content"
     }`;
+
+  const sidebarLinkClass =
+    "group flex w-full items-center justify-between rounded-xl border border-transparent px-3 py-2 text-left text-sm text-muted transition-colors hover:border-surface-200 hover:bg-surface-100/60 hover:text-surface-content";
 
   onMount(() => {
     const syncSectionFromHash = () => {
@@ -97,6 +101,57 @@
     </div>
   </nav>
 
+  {#if sidebar_link_groups.length > 0}
+    <div class="mb-6 space-y-3 lg:hidden">
+      {#each sidebar_link_groups as group (group.title)}
+        <div data-settings-link-group class="space-y-1">
+          <p
+            class="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-muted"
+          >
+            {group.title}
+          </p>
+          <div
+            class="rounded-2xl border border-surface-200 bg-surface/90 p-2 shadow-[0_1px_0_rgba(255,255,255,0.02)]"
+          >
+            {#each group.items as item (item.label)}
+              {#if item.inertia}
+                <Link
+                  href={item.href}
+                  data-settings-sidebar-link
+                  class={sidebarLinkClass}
+                >
+                  <span>{item.label}</span>
+                  {#if item.badge}
+                    <span
+                      class="ml-3 rounded-full bg-primary px-1.5 py-0.5 text-xs font-medium text-on-primary"
+                    >
+                      {item.badge}
+                    </span>
+                  {/if}
+                </Link>
+              {:else}
+                <a
+                  href={item.href}
+                  data-settings-sidebar-link
+                  class={sidebarLinkClass}
+                >
+                  <span>{item.label}</span>
+                  {#if item.badge}
+                    <span
+                      class="ml-3 rounded-full bg-primary px-1.5 py-0.5 text-xs font-medium text-on-primary"
+                    >
+                      {item.badge}
+                    </span>
+                  {/if}
+                </a>
+              {/if}
+            {/each}
+          </div>
+        </div>
+      {/each}
+    </div>
+  {/if}
+
   <div
     class="grid grid-cols-1 gap-6 lg:grid-cols-[280px_minmax(0,1fr)] lg:gap-8"
   >
@@ -111,6 +166,53 @@
             <p class="mt-1 text-xs leading-5 opacity-80">{section.blurb}</p>
           </Link>
         {/each}
+
+        {#if sidebar_link_groups.length > 0}
+          <div class="mt-3 space-y-3 border-t border-surface-200 pt-3">
+            {#each sidebar_link_groups as group (group.title)}
+              <div data-settings-link-group class="space-y-1">
+                <p
+                  class="px-3 text-xs font-semibold uppercase tracking-[0.14em] text-muted"
+                >
+                  {group.title}
+                </p>
+                {#each group.items as item (item.label)}
+                  {#if item.inertia}
+                    <Link
+                      href={item.href}
+                      data-settings-sidebar-link
+                      class={sidebarLinkClass}
+                    >
+                      <span>{item.label}</span>
+                      {#if item.badge}
+                        <span
+                          class="ml-3 rounded-full bg-primary px-1.5 py-0.5 text-xs font-medium text-on-primary"
+                        >
+                          {item.badge}
+                        </span>
+                      {/if}
+                    </Link>
+                  {:else}
+                    <a
+                      href={item.href}
+                      data-settings-sidebar-link
+                      class={sidebarLinkClass}
+                    >
+                      <span>{item.label}</span>
+                      {#if item.badge}
+                        <span
+                          class="ml-3 rounded-full bg-primary px-1.5 py-0.5 text-xs font-medium text-on-primary"
+                        >
+                          {item.badge}
+                        </span>
+                      {/if}
+                    </a>
+                  {/if}
+                {/each}
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
     </aside>
 

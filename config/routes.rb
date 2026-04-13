@@ -29,6 +29,7 @@ Rails.application.routes.draw do
 
   post "/oauth/applications/:id/rotate_secret", to: "doorkeeper/applications#rotate_secret", as: :rotate_secret_oauth_application
   root "static_pages#index"
+  get "employee_monitoring", to: "admin/employee_monitoring#show", as: :employee_monitoring
 
   resources :extensions, only: [ :index ]
 

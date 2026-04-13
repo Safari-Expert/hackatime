@@ -30,8 +30,14 @@
 
     <nav class="space-y-1">
       <div>
-        <%= link_to root_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(root_path) ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-          Home
+        <% if current_user %>
+          <%= link_to employee_monitoring_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{(current_page?(employee_monitoring_path) || current_page?(admin_employee_monitoring_path) || request.path.start_with?('/employee_monitoring') || request.path.start_with?('/admin/employee_monitoring')) ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
+            Employee Monitoring
+          <% end %>
+        <% else %>
+          <%= link_to root_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(root_path) ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
+            Home
+          <% end %>
         <% end %>
       </div>
 
@@ -64,26 +70,8 @@
         </div>
 
         <div>
-          <%= link_to docs_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(docs_path) || request.path.start_with?('/docs') ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-            Docs
-          <% end %>
-        </div>
-
-        <div>
-          <%= link_to extensions_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(extensions_path) ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-            Extensions
-          <% end %>
-        </div>
-
-        <div>
-          <%= link_to my_settings_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(my_settings_path) ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
+          <%= link_to my_settings_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{request.path.start_with?('/my/settings') ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
             Settings
-          <% end %>
-        </div>
-
-        <div>
-          <%= link_to oauth_applications_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(oauth_applications_path) || request.path.start_with?('/oauth/applications') ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-            My OAuth Apps
           <% end %>
         </div>
 
@@ -120,65 +108,9 @@
             <% end %>
           <% end %>
 
-          <% if current_user&.admin_level == "admin" || current_user&.admin_level == "superadmin" %>
-            <% admin_tool(nil, "div") do %>
-              <%= link_to admin_trust_level_audit_logs_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(admin_trust_level_audit_logs_path) || request.path.start_with?('/admin/trust_level_audit_logs') ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-                Trust Level Logs
-              <% end %>
-            <% end %>
-          <% elsif current_user&.admin_level == "viewer" %>
-            <% viewer_tool(nil, "div") do %>
-              <%= link_to admin_trust_level_audit_logs_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(admin_trust_level_audit_logs_path) || request.path.start_with?('/admin/trust_level_audit_logs') ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-                Trust Level Logs
-              <% end %>
-            <% end %>
-          <% end %>
-
-          <% if current_user&.admin_level == "admin" || current_user&.admin_level == "superadmin" %>
-            <% admin_tool(nil, "div") do %>
-              <%= link_to admin_admin_api_keys_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(admin_admin_api_keys_path) || request.path.start_with?('/admin/admin_api_keys') ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-                Admin API Keys
-              <% end %>
-            <% end %>
-          <% elsif current_user&.admin_level == "viewer" %>
-            <% viewer_tool(nil, "div") do %>
-              <%= link_to admin_admin_api_keys_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(admin_admin_api_keys_path) || request.path.start_with?('/admin/admin_api_keys') ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-                Admin API Keys
-              <% end %>
-            <% end %>
-          <% end %>
-
-          <% superadmin_tool(nil, "div") do %>
-            <%= link_to admin_admin_users_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(admin_admin_users_path) ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-              Admin Management
-            <% end %>
-          <% end %>
-
-          <% superadmin_tool(nil, "div") do %>
-            <%= link_to admin_deletion_requests_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(admin_deletion_requests_path) ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-              Account Deletions
-              <% pending_count = DeletionRequest.pending.count %>
-              <% if pending_count > 0 %>
-                <span class="ml-1 px-1.5 py-0.5 text-xs rounded-full bg-primary text-white font-medium"><%= pending_count %></span>
-              <% end %>
-            <% end %>
-          <% end %>
-
           <% superadmin_tool(nil, "div") do %>
             <%= link_to good_job_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(good_job_path) ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
               GoodBoy
-            <% end %>
-          <% end %>
-
-          <% superadmin_tool(nil, "div") do %>
-            <%= link_to admin_oauth_applications_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(admin_oauth_applications_path) || request.path.start_with?('/admin/oauth_applications') ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-              All OAuth Apps
-            <% end %>
-          <% end %>
-
-          <% superadmin_tool(nil, "div") do %>
-            <%= link_to flipper_path, class: "block px-3 py-2 rounded-md text-sm transition-colors #{current_page?(flipper_path) ? 'bg-primary text-white font-bold' : 'hover:bg-darkless'}", data: { action: "click->nav#clickLink" } do %>
-              Feature Flags
             <% end %>
           <% end %>
         </div>

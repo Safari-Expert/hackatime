@@ -21,6 +21,18 @@ export type SettingsSubsection = {
   label: string;
 };
 
+export type SidebarLinkItem = {
+  label: string;
+  href: string;
+  badge?: number | null;
+  inertia?: boolean;
+};
+
+export type SidebarLinkGroup = {
+  title: string;
+  items: SidebarLinkItem[];
+};
+
 export type Option = {
   label: string;
   value: string;
@@ -198,6 +210,7 @@ export type ErrorsProps = {
 export type SettingsCommonProps = {
   active_section: SectionId;
   section_paths: SectionPaths;
+  sidebar_link_groups: SidebarLinkGroup[];
   page_title: string;
   heading: string;
   subheading: string;

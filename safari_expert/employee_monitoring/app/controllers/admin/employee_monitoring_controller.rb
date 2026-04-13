@@ -3,11 +3,16 @@
 class Admin::EmployeeMonitoringController < InertiaController
   layout "inertia"
 
-  before_action :authenticate_admin!
+  before_action :authenticate_user!
   before_action :set_target_user, only: :update_profile
   before_action :require_schedule_editor!, only: :update_profile
 
   def show
+    if request.path.start_with?("/admin/employee_monitoring")
+      redirect_to employee_monitoring_path(request.query_parameters)
+      return
+    end
+
     overview = SafariExpert::EmployeeMonitoring::OverviewQuery.new(
       now: Time.current,
       search: params[:search],
@@ -22,15 +27,15 @@ class Admin::EmployeeMonitoringController < InertiaController
       overview: decorate_overview(overview),
       selected_user: selected_user ? decorate_selected_user(selected_user) : nil,
       can_edit_schedule: can_edit_schedule?,
-      page_path: admin_employee_monitoring_path
+      page_path: employee_monitoring_path
     }
   end
 
   def update_profile
     SafariExpert::EmployeeMonitoring::ProfileUpdater.new(user: @target_user, params: profile_params).call
-    redirect_to admin_employee_monitoring_path(user_id: @target_user.id), notice: "Monitoring schedule updated."
+    redirect_to employee_monitoring_path(user_id: @target_user.id), notice: "Monitoring schedule updated."
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to admin_employee_monitoring_path(user_id: @target_user.id), alert: e.record.errors.full_messages.to_sentence
+    redirect_to employee_monitoring_path(user_id: @target_user.id), alert: e.record.errors.full_messages.to_sentence
   end
 
   private
@@ -38,7 +43,7 @@ class Admin::EmployeeMonitoringController < InertiaController
   def decorate_overview(overview)
     overview.merge(
       roster: overview[:roster].map do |row|
-        row.merge(selection_path: admin_employee_monitoring_path(user_id: row[:id]))
+        row.merge(selection_path: employee_monitoring_path(user_id: row[:id]))
       end
     )
   end
@@ -55,14 +60,8 @@ class Admin::EmployeeMonitoringController < InertiaController
     @target_user = User.find(params[:id])
   end
 
-  def authenticate_admin!
-    unless current_user && current_user.admin_level.in?(%w[admin superadmin viewer])
-      redirect_to root_path, alert: "You are not authorized to access this page."
-    end
-  end
-
   def require_schedule_editor!
-    redirect_to admin_employee_monitoring_path(user_id: @target_user.id), alert: "You are not authorized to edit monitoring schedules." unless can_edit_schedule?
+    redirect_to employee_monitoring_path(user_id: @target_user.id), alert: "You are not authorized to edit monitoring schedules." unless can_edit_schedule?
   end
 
   def can_edit_schedule?
