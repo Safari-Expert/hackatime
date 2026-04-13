@@ -52,10 +52,10 @@ module SafariExpert
           absent_days: rows.count { |row| row[:attendance_signal] == "not_started" },
           ended_early_days: rows.count { |row| row[:attendance_signal] == "ended_early" },
           average_coverage: if rows.any?
-            (rows.sum { |row| row[:coverage_percent].to_f } / rows.length).round(2)
-          else
-            0.0
-          end,
+                              (rows.sum { |row| row[:coverage_percent].to_f } / rows.length).round(2)
+                            else
+                              0.0
+                            end,
           coding_hours: (rows.sum { |row| row[:coding_seconds].to_i } / 3600.0).round(2)
         }
       end

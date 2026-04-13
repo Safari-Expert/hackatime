@@ -29,7 +29,7 @@ module Harbor
       Rails.root.join("safari_expert/employee_monitoring/app/controllers"),
       Rails.root.join("safari_expert/employee_monitoring/app/models"),
       Rails.root.join("safari_expert/employee_monitoring/app/services"),
-      Rails.root.join("safari_expert/employee_monitoring/app/jobs"),
+      Rails.root.join("safari_expert/employee_monitoring/app/jobs")
     ].each do |path|
       config.autoload_paths << path
       config.eager_load_paths << path
