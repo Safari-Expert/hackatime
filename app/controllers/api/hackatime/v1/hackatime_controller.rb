@@ -285,6 +285,7 @@ class Api::Hackatime::V1::HackatimeController < ApplicationController
       new_heartbeat = Heartbeat.find_or_create_by(attrs)
 
       queue_project_mapping(heartbeat[:project])
+      queue_commit_pull(heartbeat[:project])
       results << [ new_heartbeat.attributes, 201 ]
     rescue => e
       report_error(e, message: "Error creating heartbeat")
@@ -296,6 +297,8 @@ class Api::Hackatime::V1::HackatimeController < ApplicationController
   end
 
   def queue_project_mapping(project_name)
+    return if project_name.blank?
+
     # only queue the job once per hour
     Rails.cache.fetch("attempt_project_repo_mapping_job_#{@user.id}_#{project_name}", expires_in: 1.hour) do
       AttemptProjectRepoMappingJob.perform_later(@user.id, project_name)
@@ -303,6 +306,25 @@ class Api::Hackatime::V1::HackatimeController < ApplicationController
   rescue => e
     # never raise an error here because it will break the heartbeat flow
     report_error(e, message: "Error queuing project mapping")
+  end
+
+  def queue_commit_pull(project_name)
+    return if project_name.blank?
+    return unless @user.github_access_token.present?
+    return unless @user.github_username.present?
+
+    mapping = @user.project_repo_mappings.active.includes(:repository).find_by(project_name: project_name)
+    return unless mapping&.repo_url.present?
+
+    repository = mapping.repository || Repository.find_or_create_by_url(mapping.repo_url)
+    return if repository.owner.blank? || repository.name.blank?
+
+    cache_key = "pull_repo_commits_job_#{@user.id}_#{repository.owner}_#{repository.name}"
+    Rails.cache.fetch(cache_key, expires_in: 10.minutes) do
+      PullRepoCommitsJob.perform_later(@user.id, repository.owner, repository.name)
+    end
+  rescue => e
+    report_error(e, message: "Error queuing commit pull")
   end
 
   def check_lockout
