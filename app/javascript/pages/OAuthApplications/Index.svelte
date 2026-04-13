@@ -32,7 +32,7 @@
   <title>{page_title}</title>
 </svelte:head>
 
-<div class="mx-auto max-w-6xl space-y-6">
+<div class="mx-auto max-w-[1600px] space-y-6">
   <header class="flex flex-wrap items-start justify-between gap-3">
     <div>
       <h1 class="text-3xl font-bold text-surface-content">{heading}</h1>

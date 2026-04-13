@@ -130,7 +130,7 @@
   <title>{page_title}</title>
 </svelte:head>
 
-<div class="mx-auto max-w-6xl space-y-6">
+<div class="mx-auto max-w-[1600px] space-y-6">
   <header>
     <h1 class="text-3xl font-bold text-surface-content">{heading}</h1>
     <p class="mt-1 text-sm text-muted">{subheading}</p>

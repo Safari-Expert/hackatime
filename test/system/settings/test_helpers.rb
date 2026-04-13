@@ -8,6 +8,8 @@ module SettingsSystemTestHelpers
     assert_text "Settings"
     assert_text marker_text
     assert_selector "[data-settings-shell]"
+    assert_includes find("[data-app-shell]")[:class], "max-w-[1800px]"
+    assert_includes find("[data-settings-shell]")[:class], "max-w-[1600px]"
     assert_selector "[data-settings-content]"
     assert_selector "[data-settings-card]", minimum: card_count
   end

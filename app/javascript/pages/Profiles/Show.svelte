@@ -76,7 +76,7 @@
   <title>{page_title}</title>
 </svelte:head>
 
-<div class="mx-auto max-w-6xl space-y-6">
+<div class="mx-auto max-w-[1600px] space-y-6">
   <section
     class="overflow-hidden rounded-2xl border border-surface-200 bg-surface p-6 shadow-sm"
   >

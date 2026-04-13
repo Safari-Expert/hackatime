@@ -584,7 +584,10 @@
 <main
   class={`flex-1 min-h-screen transition-all duration-300 ease-in-out ${layout.nav.user_present ? "lg:ml-62.5" : ""}`}
 >
-  <div class="w-full max-w-7xl mx-auto p-4 pt-16 lg:pt-8 md:p-8">
+  <div
+    data-app-shell
+    class="mx-auto w-full max-w-[1800px] px-3 py-4 pt-16 sm:px-4 lg:px-6 lg:pt-8 xl:px-8"
+  >
     {@render children?.()}
 
     <footer

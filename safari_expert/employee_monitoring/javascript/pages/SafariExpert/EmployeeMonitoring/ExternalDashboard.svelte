@@ -145,7 +145,10 @@
   <title>{page_title}</title>
 </svelte:head>
 
-<div class="mx-auto max-w-6xl px-4 py-6">
+<div
+  data-external-attendance-shell
+  class="mx-auto max-w-[1600px] px-2 py-6 sm:px-3 lg:px-4"
+>
   <div class="grid gap-5">
     <div class="rounded-2xl border border-surface-200 bg-dark p-5">
       <div class="flex flex-wrap items-start justify-between gap-4">
@@ -157,14 +160,17 @@
             {user.display_name}
           </h1>
           <p class="m-0 text-sm text-muted">
-            {user.username ? `@${user.username}` : `User ${user.id}`} · {user.schedule.label}
+            {user.username ? `@${user.username}` : `User ${user.id}`} · {user
+              .schedule.label}
           </p>
           <p class="m-0 text-sm text-muted">
             {user.schedule.effective_timezone}
           </p>
         </div>
 
-        <div class="min-w-[240px] rounded-xl border border-surface-200 bg-surface p-4">
+        <div
+          class="min-w-[240px] rounded-xl border border-surface-200 bg-surface p-4"
+        >
           <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
             Current status
           </p>
@@ -180,7 +186,11 @@
           {#if can_clock}
             <div class="mt-4 flex flex-wrap gap-2">
               <form method="POST" action={clock_in_path}>
-                <input type="hidden" name="authenticity_token" value={csrfToken} />
+                <input
+                  type="hidden"
+                  name="authenticity_token"
+                  value={csrfToken}
+                />
                 <Button
                   type="submit"
                   variant="primary"
@@ -192,7 +202,11 @@
               </form>
 
               <form method="POST" action={clock_out_path}>
-                <input type="hidden" name="authenticity_token" value={csrfToken} />
+                <input
+                  type="hidden"
+                  name="authenticity_token"
+                  value={csrfToken}
+                />
                 <Button
                   type="submit"
                   variant="surface"
@@ -216,13 +230,17 @@
         </p>
       </div>
       <div class="rounded-2xl border border-surface-200 bg-surface p-4">
-        <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">This week</p>
+        <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
+          This week
+        </p>
         <p class="mt-3 text-3xl font-semibold text-surface-content">
           {formatDuration(user.attendance.week_seconds)}
         </p>
       </div>
       <div class="rounded-2xl border border-surface-200 bg-surface p-4">
-        <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">This month</p>
+        <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
+          This month
+        </p>
         <p class="mt-3 text-3xl font-semibold text-surface-content">
           {formatDuration(user.attendance.month_seconds)}
         </p>
@@ -298,7 +316,9 @@
         </h2>
         <div class="mt-4 grid gap-3">
           {#each user.schedule.schedule_days as day}
-            <div class="flex items-center justify-between gap-3 rounded-xl border border-surface-200 bg-dark px-3 py-2 text-sm">
+            <div
+              class="flex items-center justify-between gap-3 rounded-xl border border-surface-200 bg-dark px-3 py-2 text-sm"
+            >
               <span class="text-surface-content">{day.day_label}</span>
               {#if day.enabled}
                 <span class="text-muted">
@@ -314,7 +334,8 @@
 
         {#if can_edit_schedule}
           <p class="mt-4 text-sm text-muted">
-            Admin schedule editing is available from the shared employee monitoring roster.
+            Admin schedule editing is available from the shared employee
+            monitoring roster.
           </p>
         {/if}
       </div>

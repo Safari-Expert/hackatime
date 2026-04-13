@@ -19,6 +19,8 @@ class ExternalAttendanceTest < ApplicationSystemTestCase
 
     assert_text "EXTERNAL ATTENDANCE"
     assert_text "Clock in"
+    assert_includes find("[data-app-shell]")[:class], "max-w-[1800px]"
+    assert_includes find("[data-external-attendance-shell]")[:class], "max-w-[1600px]"
 
     travel_to Time.utc(2026, 4, 13, 9, 0, 0) do
       click_button "Clock in"

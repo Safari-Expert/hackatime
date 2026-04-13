@@ -15,6 +15,8 @@ class ProjectsTest < ApplicationSystemTestCase
 
     visit my_projects_path
 
+    assert_includes find("[data-app-shell]")[:class], "max-w-[1800px]"
+    assert_includes find("[data-projects-shell]")[:class], "max-w-[1600px]"
     assert_text "active-project"
     assert_no_text "archived-project"
 

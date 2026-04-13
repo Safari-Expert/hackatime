@@ -181,7 +181,7 @@
   <title>{page_title}</title>
 </svelte:head>
 
-<div class="mx-auto max-w-7xl">
+<div data-projects-shell class="mx-auto max-w-[1600px]">
   <div class="mb-4 flex flex-wrap items-center justify-between gap-4">
     <div class="flex items-center gap-4">
       <h1 class="text-3xl font-bold text-surface-content">My Projects</h1>
