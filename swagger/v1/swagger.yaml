@@ -1496,6 +1496,211 @@ paths:
                           description: Primary email or "no email"
         '401':
           description: unauthorized
+  "/api/admin/v1/employee_monitoring/summary":
+    get:
+      summary: Employee monitoring summary
+      tags:
+      - Employee Monitoring
+      security:
+      - AdminToken: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date_time
+                  timezone:
+                    type: string
+                  monitored_users:
+                    type: integer
+                  active_in_window:
+                    type: integer
+                  idle_in_window:
+                    type: integer
+                  not_started_yet:
+                    type: integer
+                  ended_early:
+                    type: integer
+                  after_hours_active:
+                    type: integer
+                  monitoring_path:
+                    type: string
+                  users:
+                    type: array
+                    items:
+                      type: object
+  "/api/admin/v1/employee_monitoring/overview":
+    get:
+      summary: Employee monitoring overview
+      tags:
+      - Employee Monitoring
+      security:
+      - AdminToken: []
+      parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generated_at:
+                    type: string
+                    format: date_time
+                  timezone:
+                    type: string
+                  summary:
+                    type: object
+                  roster:
+                    type: array
+                    items:
+                      type: object
+  "/api/admin/v1/employee_monitoring/users/{id}":
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    get:
+      summary: Employee monitoring detail
+      tags:
+      - Employee Monitoring
+      security:
+      - AdminToken: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  display_name:
+                    type: string
+                  schedule:
+                    type: object
+                  current_day:
+                    type: object
+                    properties:
+                      commit_count:
+                        type: integer
+                      commit_line_additions:
+                        type: integer
+                      commit_line_deletions:
+                        type: integer
+                      timeline_buckets:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            bucket_started_at:
+                              type: string
+                              format: date_time
+                            status:
+                              type: string
+                            in_window:
+                              type: boolean
+                            presence_seconds:
+                              type: integer
+                            coding_seconds:
+                              type: integer
+                            write_heartbeats_count:
+                              type: integer
+                            line_additions:
+                              type: integer
+                            line_deletions:
+                              type: integer
+                            categories:
+                              type: object
+                            projects:
+                              type: array
+                              items:
+                                type: string
+                            languages:
+                              type: array
+                              items:
+                                type: string
+                            language_breakdown:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  language:
+                                    type: string
+                                  coding_seconds:
+                                    type: integer
+                                  line_additions:
+                                    type: integer
+                                  line_deletions:
+                                    type: integer
+                  trend_14d:
+                    type: object
+                  trend_30d:
+                    type: object
+                  history:
+                    type: array
+                    items:
+                      type: object
+  "/api/admin/v1/employee_monitoring/users/{id}/profile":
+    parameters:
+    - name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+    patch:
+      summary: Update employee monitoring profile
+      tags:
+      - Employee Monitoring
+      security:
+      - AdminToken: []
+      parameters: []
+      responses:
+        '200':
+          description: successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  profile:
+                    type: object
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                timezone_override:
+                  type: string
+                expected_start_minute_local:
+                  type: integer
+                expected_end_minute_local:
+                  type: integer
+                start_grace_minutes:
+                  type: integer
+                end_grace_minutes:
+                  type: integer
+                workdays:
+                  type: array
+                  items:
+                    type: integer
   "/api/admin/v1/permissions":
     get:
       summary: List Permissions
@@ -1607,210 +1812,6 @@ paths:
                   - default
               required:
               - admin_level
-  "/api/admin/v1/employee_monitoring/summary":
-    get:
-      summary: Employee monitoring summary
-      tags:
-      - Employee Monitoring
-      security:
-      - AdminToken: []
-      responses:
-        '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  generated_at:
-                    type: string
-                    format: date_time
-                  timezone:
-                    type: string
-                  monitored_users:
-                    type: integer
-                  active_in_window:
-                    type: integer
-                  idle_in_window:
-                    type: integer
-                  not_started_yet:
-                    type: integer
-                  ended_early:
-                    type: integer
-                  after_hours_active:
-                    type: integer
-                  monitoring_path:
-                    type: string
-                  users:
-                    type: array
-                    items:
-                      type: object
-  "/api/admin/v1/employee_monitoring/overview":
-    get:
-      summary: Employee monitoring overview
-      tags:
-      - Employee Monitoring
-      security:
-      - AdminToken: []
-      parameters:
-      - name: status
-        in: query
-        required: false
-        schema:
-          type: string
-      responses:
-        '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  generated_at:
-                    type: string
-                    format: date_time
-                  timezone:
-                    type: string
-                  summary:
-                    type: object
-                  roster:
-                    type: array
-                    items:
-                      type: object
-  "/api/admin/v1/employee_monitoring/users/{id}":
-    parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-    get:
-      summary: Employee monitoring detail
-      tags:
-      - Employee Monitoring
-      security:
-      - AdminToken: []
-      responses:
-        '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: integer
-                  display_name:
-                    type: string
-                  schedule:
-                    type: object
-                  current_day:
-                    type: object
-                    properties:
-                      commit_count:
-                        type: integer
-                      commit_line_additions:
-                        type: integer
-                      commit_line_deletions:
-                        type: integer
-                      timeline_buckets:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            bucket_started_at:
-                              type: string
-                              format: date_time
-                            status:
-                              type: string
-                            in_window:
-                              type: boolean
-                            presence_seconds:
-                              type: integer
-                            coding_seconds:
-                              type: integer
-                            write_heartbeats_count:
-                              type: integer
-                            line_additions:
-                              type: integer
-                            line_deletions:
-                              type: integer
-                            categories:
-                              type: object
-                            projects:
-                              type: array
-                              items:
-                                type: string
-                            languages:
-                              type: array
-                              items:
-                                type: string
-                            language_breakdown:
-                              type: array
-                              items:
-                                type: object
-                                properties:
-                                  language:
-                                    type: string
-                                  coding_seconds:
-                                    type: integer
-                                  line_additions:
-                                    type: integer
-                                  line_deletions:
-                                    type: integer
-                  trend_14d:
-                    type: object
-                  trend_30d:
-                    type: object
-                  history:
-                    type: array
-                    items:
-                      type: object
-  "/api/admin/v1/employee_monitoring/users/{id}/profile":
-    parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-    patch:
-      summary: Update employee monitoring profile
-      tags:
-      - Employee Monitoring
-      security:
-      - AdminToken: []
-      responses:
-        '200':
-          description: successful
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  success:
-                    type: boolean
-                  profile:
-                    type: object
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                timezone_override:
-                  type: string
-                expected_start_minute_local:
-                  type: integer
-                expected_end_minute_local:
-                  type: integer
-                start_grace_minutes:
-                  type: integer
-                end_grace_minutes:
-                  type: integer
-                workdays:
-                  type: array
-                  items:
-                    type: integer
   "/api/hackatime/v1/users/{id}/heartbeats":
     post:
       summary: Push heartbeats (WakaTime compatible)
