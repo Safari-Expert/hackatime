@@ -10,12 +10,10 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_03_22_180603) do
+ActiveRecord::Schema[8.1].define(version: 2026_04_13_120000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
-  # Self-hosted Railway app users should not need elevated privileges just to load
-  # the baseline schema in development.
-  enable_extension "pg_stat_statements" unless ENV["SAFARI_EXPERT_SELF_HOSTED"] == "true"
+  enable_extension "pg_stat_statements"
 
   create_table "active_storage_attachments", force: :cascade do |t|
     t.bigint "blob_id", null: false
@@ -116,6 +114,87 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_22_180603) do
     t.bigint "user_id", null: false
     t.index ["email"], name: "index_email_verification_requests_on_email", unique: true
     t.index ["user_id"], name: "index_email_verification_requests_on_user_id"
+  end
+
+  create_table "employee_monitoring_daily_rollups", force: :cascade do |t|
+    t.integer "active_bucket_count", default: 0, null: false
+    t.string "activity_signal", default: "low", null: false
+    t.boolean "after_hours_active", default: false, null: false
+    t.decimal "ai_assisted_output_confidence", precision: 4, scale: 2, default: "0.0", null: false
+    t.string "ai_assisted_output_level", default: "insufficient", null: false
+    t.decimal "ai_assisted_output_ratio", precision: 6, scale: 2, default: "0.0", null: false
+    t.text "ai_assisted_output_reason"
+    t.string "attendance_signal", default: "in_progress", null: false
+    t.integer "coding_seconds", default: 0, null: false
+    t.integer "commit_count", default: 0, null: false
+    t.integer "commit_line_additions", default: 0, null: false
+    t.integer "commit_line_deletions", default: 0, null: false
+    t.jsonb "commit_markers", default: [], null: false
+    t.decimal "coverage_percent", precision: 5, scale: 2, default: "0.0", null: false
+    t.datetime "created_at", null: false
+    t.string "delivery_signal", default: "quiet", null: false
+    t.jsonb "editor_mix", default: [], null: false
+    t.boolean "ended_early", default: false, null: false
+    t.datetime "first_seen_at"
+    t.integer "gap_count", default: 0, null: false
+    t.integer "idle_bucket_count", default: 0, null: false
+    t.jsonb "language_mix", default: [], null: false
+    t.datetime "last_seen_at"
+    t.date "local_date", null: false
+    t.boolean "not_started_yet", default: false, null: false
+    t.integer "presence_seconds", default: 0, null: false
+    t.jsonb "project_mix", default: [], null: false
+    t.datetime "scheduled_end_at"
+    t.datetime "scheduled_start_at"
+    t.integer "session_count", default: 0, null: false
+    t.jsonb "session_spans", default: [], null: false
+    t.string "status", default: "inactive", null: false
+    t.jsonb "timeline_buckets", default: [], null: false
+    t.string "timezone", null: false
+    t.integer "unique_files_count", default: 0, null: false
+    t.integer "unique_languages_count", default: 0, null: false
+    t.integer "unique_projects_count", default: 0, null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.integer "write_heartbeats_count", default: 0, null: false
+    t.index ["user_id", "local_date"], name: "index_employee_monitoring_rollups_on_user_and_local_date", unique: true
+    t.index ["user_id"], name: "index_employee_monitoring_daily_rollups_on_user_id"
+  end
+
+  create_table "employee_monitoring_interval_snapshots", force: :cascade do |t|
+    t.datetime "bucket_started_at", null: false
+    t.jsonb "categories", default: {}, null: false
+    t.integer "coding_seconds", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.boolean "in_window", default: false, null: false
+    t.jsonb "language_breakdown", default: [], null: false
+    t.jsonb "languages", default: [], null: false
+    t.integer "line_additions", default: 0, null: false
+    t.integer "line_deletions", default: 0, null: false
+    t.date "local_date", null: false
+    t.integer "presence_seconds", default: 0, null: false
+    t.jsonb "projects", default: [], null: false
+    t.string "status", default: "inactive", null: false
+    t.string "timezone", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.integer "write_heartbeats_count", default: 0, null: false
+    t.index ["user_id", "bucket_started_at"], name: "index_employee_monitoring_snapshots_on_user_and_bucket", unique: true
+    t.index ["user_id"], name: "index_employee_monitoring_interval_snapshots_on_user_id"
+  end
+
+  create_table "employee_monitoring_profiles", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.integer "end_grace_minutes", default: 15, null: false
+    t.integer "expected_end_minute_local", default: 1020, null: false
+    t.integer "expected_start_minute_local", default: 540, null: false
+    t.boolean "monitoring_enabled", default: true, null: false
+    t.integer "start_grace_minutes", default: 15, null: false
+    t.string "timezone_override"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.integer "workdays", default: [1, 2, 3, 4, 5], null: false, array: true
+    t.index ["user_id"], name: "index_employee_monitoring_profiles_on_user_id", unique: true
   end
 
   create_table "flipper_features", force: :cascade do |t|
@@ -331,6 +410,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_22_180603) do
     t.index ["user_id", "time", "project"], name: "idx_heartbeats_user_time_project_stats", where: "(deleted_at IS NULL)"
     t.index ["user_id", "time"], name: "idx_heartbeats_user_time_active", where: "(deleted_at IS NULL)"
     t.index ["user_id"], name: "index_heartbeats_on_user_id"
+  end
+
+  create_table "internal_ui_launch_redemptions", force: :cascade do |t|
+    t.string "audience", null: false
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.string "github_uid", null: false
+    t.string "jti", null: false
+    t.datetime "updated_at", null: false
+    t.index ["expires_at"], name: "index_internal_ui_launch_redemptions_on_expires_at"
+    t.index ["jti"], name: "index_internal_ui_launch_redemptions_on_jti", unique: true
   end
 
   create_table "leaderboard_entries", force: :cascade do |t|
@@ -673,6 +763,9 @@ ActiveRecord::Schema[8.1].define(version: 2026_03_22_180603) do
   add_foreign_key "deletion_requests", "users", column: "admin_approved_by_id"
   add_foreign_key "email_addresses", "users"
   add_foreign_key "email_verification_requests", "users"
+  add_foreign_key "employee_monitoring_daily_rollups", "users"
+  add_foreign_key "employee_monitoring_interval_snapshots", "users"
+  add_foreign_key "employee_monitoring_profiles", "users"
   add_foreign_key "goals", "users"
   add_foreign_key "heartbeat_import_runs", "users"
   add_foreign_key "heartbeat_import_sources", "users"

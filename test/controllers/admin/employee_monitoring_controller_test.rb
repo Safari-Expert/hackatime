@@ -2,9 +2,10 @@ require "test_helper"
 
 class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
   setup do
+    @search_term = "employee-monitoring-controller-spec"
     @viewer = User.create!(timezone: "UTC", admin_level: "viewer", github_username: "viewer-user")
     @admin = User.create!(timezone: "UTC", admin_level: "admin", github_username: "admin-user")
-    @monitored = User.create!(timezone: "UTC", github_username: "monitored-dev")
+    @monitored = User.create!(timezone: "UTC", github_username: "#{@search_term}-monitored")
     @monitored.create_employee_monitoring_profile!
     Heartbeat.create!(
       user: @monitored,
@@ -21,13 +22,19 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "renders the employee monitoring page for viewers" do
-    get admin_employee_monitoring_path(user_id: @monitored.id)
+    get admin_employee_monitoring_path(user_id: @monitored.id, search: @search_term)
 
     assert_response :success
     assert_inertia_component "SafariExpert/EmployeeMonitoring/Index"
     assert_equal "Employee Monitoring", inertia_page.dig("props", "page_title")
     assert_equal false, inertia_page.dig("props", "can_edit_schedule")
     assert_equal @monitored.id, inertia_page.dig("props", "selected_user", "id")
+    assert_equal 1, inertia_page.dig("props", "overview", "summary", "monitored_users")
+    assert_equal 1, inertia_page.dig("props", "overview", "roster").length
+    assert_not_nil inertia_page.dig("props", "selected_user", "current_day", "write_heartbeats_count")
+    assert_not_nil inertia_page.dig("props", "selected_user", "current_day", "timeline_buckets", 0, "line_additions")
+    assert_not_nil inertia_page.dig("props", "selected_user", "current_day", "timeline_buckets", 0, "language_breakdown")
+    assert_not_nil inertia_page.dig("props", "selected_user", "schedule", "label")
   end
 
   test "prevents viewers from updating schedules" do

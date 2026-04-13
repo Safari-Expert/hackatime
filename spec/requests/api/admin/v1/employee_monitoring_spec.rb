@@ -103,7 +103,45 @@ RSpec.describe "Api::Admin::V1::EmployeeMonitoring", type: :request do
             id: { type: :integer },
             display_name: { type: :string },
             schedule: { type: :object },
-            current_day: { type: :object },
+            current_day: {
+              type: :object,
+              properties: {
+                commit_count: { type: :integer },
+                commit_line_additions: { type: :integer },
+                commit_line_deletions: { type: :integer },
+                timeline_buckets: {
+                  type: :array,
+                  items: {
+                    type: :object,
+                    properties: {
+                      bucket_started_at: { type: :string, format: :date_time },
+                      status: { type: :string },
+                      in_window: { type: :boolean },
+                      presence_seconds: { type: :integer },
+                      coding_seconds: { type: :integer },
+                      write_heartbeats_count: { type: :integer },
+                      line_additions: { type: :integer },
+                      line_deletions: { type: :integer },
+                      categories: { type: :object },
+                      projects: { type: :array, items: { type: :string } },
+                      languages: { type: :array, items: { type: :string } },
+                      language_breakdown: {
+                        type: :array,
+                        items: {
+                          type: :object,
+                          properties: {
+                            language: { type: :string },
+                            coding_seconds: { type: :integer },
+                            line_additions: { type: :integer },
+                            line_deletions: { type: :integer }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
             trend_14d: { type: :object },
             trend_30d: { type: :object },
             history: { type: :array, items: { type: :object } }
@@ -167,7 +205,7 @@ RSpec.describe "Api::Admin::V1::EmployeeMonitoring", type: :request do
     end
   end
 
-  def create_heartbeat(user, at, line_additions: 0)
+  def create_heartbeat(user, at, line_additions: 0, line_deletions: 0)
     Heartbeat.create!(
       user: user,
       time: at.to_i,
@@ -178,6 +216,7 @@ RSpec.describe "Api::Admin::V1::EmployeeMonitoring", type: :request do
       entity: "/app/internal_ui/app/page.tsx",
       is_write: true,
       line_additions: line_additions,
+      line_deletions: line_deletions,
       source_type: :test_entry
     )
   end

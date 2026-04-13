@@ -230,34 +230,50 @@ module SafariExpert
             presence_seconds: 0,
             coding_seconds: 0,
             write_heartbeats_count: 0,
+            line_additions: 0,
+            line_deletions: 0,
             categories: Hash.new(0),
             projects: [],
-            languages: []
+            languages: [],
+            language_breakdown: []
           }
         end
 
         buckets.each_with_index do |bucket, index|
           bucket_range_start = bucket_start + (index * Constants::BUCKET_SIZE_MINUTES.minutes)
           bucket_range_end = bucket_range_start + Constants::BUCKET_SIZE_MINUTES.minutes
+          language_stats = Hash.new { |hash, key| hash[key] = empty_language_stat(key) }
 
           intervals.each do |interval|
             overlap = overlap_seconds(interval[:start_at], interval[:end_at], bucket_range_start, bucket_range_end)
             next if overlap <= 0
 
             bucket[:presence_seconds] += overlap
-            bucket[:coding_seconds] += overlap if coding_interval?(interval[:heartbeat])
+            next unless coding_interval?(interval[:heartbeat])
+
+            bucket[:coding_seconds] += overlap
+            language_stats[bucket_language(interval[:heartbeat])][:coding_seconds] += overlap
           end
 
           heartbeats_in_bucket = heartbeats.select { |heartbeat| heartbeat.at >= bucket_range_start && heartbeat.at < bucket_range_end }
           heartbeats_in_bucket.each do |heartbeat|
             bucket[:write_heartbeats_count] += 1 if heartbeat.is_write
+            bucket[:line_additions] += heartbeat.line_additions.to_i
+            bucket[:line_deletions] += heartbeat.line_deletions.to_i
             bucket[:categories][heartbeat.category] += 1
             bucket[:projects] << heartbeat.project if heartbeat.project.present?
-            bucket[:languages] << heartbeat.language if heartbeat.language.present?
+
+            next unless heartbeat.line_additions.to_i.positive? || heartbeat.line_deletions.to_i.positive?
+
+            stat = language_stats[bucket_language(heartbeat)]
+            stat[:line_additions] += heartbeat.line_additions.to_i
+            stat[:line_deletions] += heartbeat.line_deletions.to_i
           end
 
           bucket[:projects] = bucket[:projects].uniq
-          bucket[:languages] = bucket[:languages].uniq
+          bucket[:categories] = bucket[:categories].to_h
+          bucket[:language_breakdown] = sort_language_breakdown(language_stats)
+          bucket[:languages] = bucket[:language_breakdown].map { |stat| stat[:language] }
         end
 
         {
@@ -508,6 +524,33 @@ module SafariExpert
         ((actual_time.to_i - expected_time.to_i) / 60.0).round
       end
 
+      def empty_language_stat(language)
+        {
+          language: language,
+          coding_seconds: 0,
+          line_additions: 0,
+          line_deletions: 0
+        }
+      end
+
+      def bucket_language(heartbeat)
+        heartbeat.language.presence || "Unknown"
+      end
+
+      def sort_language_breakdown(language_stats)
+        language_stats.values
+                      .select do |stat|
+                        stat[:coding_seconds].positive? || stat[:line_additions].positive? || stat[:line_deletions].positive?
+                      end
+                      .sort_by do |stat|
+                        [
+                          -stat[:coding_seconds].to_i,
+                          -(stat[:line_additions].to_i + stat[:line_deletions].to_i),
+                          stat[:language]
+                        ]
+                      end
+      end
+
       def floor_bucket(time)
         minute = (time.min / Constants::BUCKET_SIZE_MINUTES) * Constants::BUCKET_SIZE_MINUTES
         time.change(min: minute, sec: 0)
@@ -579,9 +622,12 @@ module SafariExpert
           presence_seconds: current_bucket[:presence_seconds],
           coding_seconds: current_bucket[:coding_seconds],
           write_heartbeats_count: current_bucket[:write_heartbeats_count],
+          line_additions: current_bucket[:line_additions],
+          line_deletions: current_bucket[:line_deletions],
           categories: current_bucket[:categories],
           projects: current_bucket[:projects],
-          languages: current_bucket[:languages]
+          languages: current_bucket[:languages],
+          language_breakdown: current_bucket[:language_breakdown]
         )
         snapshot.save!
 

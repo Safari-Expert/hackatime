@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Link } from "@inertiajs/svelte";
+  import { BarChart, Tooltip } from "layerchart";
   import { onMount } from "svelte";
+  import Button from "../../../../../../app/javascript/components/Button.svelte";
 
   type Summary = {
     monitored_users: number;
@@ -54,6 +56,13 @@
     selection_path: string;
   };
 
+  type LanguageBreakdownRow = {
+    language: string;
+    coding_seconds: number;
+    line_additions: number;
+    line_deletions: number;
+  };
+
   type TimelineBucket = {
     bucket_started_at: string;
     status: string;
@@ -61,9 +70,12 @@
     presence_seconds: number;
     coding_seconds: number;
     write_heartbeats_count: number;
+    line_additions: number;
+    line_deletions: number;
     categories: Record<string, number>;
     projects: string[];
     languages: string[];
+    language_breakdown: LanguageBreakdownRow[];
   };
 
   type SessionSpan = {
@@ -171,7 +183,36 @@
     { value: 0, label: "Sun" },
   ];
 
+  type ChartMode = "churn" | "languages";
+  type ActivityChartDatum = Record<string, string | number>;
+  type ActivityChartSeries = {
+    key: string;
+    label: string;
+    color: string;
+  };
+
+  const LANGUAGE_COLORS = [
+    "#60a5fa",
+    "#f472b6",
+    "#fb923c",
+    "#facc15",
+    "#4ade80",
+    "#2dd4bf",
+    "#a78bfa",
+    "#38bdf8",
+    "#e879f9",
+    "#34d399",
+  ];
+
+  const chartPadding = {
+    top: 8,
+    right: 8,
+    left: 28,
+    bottom: 24,
+  } as const;
+
   let csrfToken = $state("");
+  let chartMode = $state<ChartMode>("churn");
 
   onMount(() => {
     csrfToken =
@@ -196,6 +237,13 @@
     }).format(new Date(value));
   }
 
+  function formatShortTime(value: string) {
+    return new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  }
+
   function formatDuration(totalSeconds: number) {
     if (totalSeconds <= 0) return "0m";
 
@@ -207,6 +255,17 @@
     return `${hours}h ${minutes}m`;
   }
 
+  function formatLineCount(value: number) {
+    if (value === 1) return "1 line";
+    return `${value} lines`;
+  }
+
+  function formatLineAxis(value: number) {
+    if (value === 0) return "0";
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
+    return `${Math.round(value)}`;
+  }
+
   function formatPercent(value: number) {
     return `${Math.round(value)}%`;
   }
@@ -216,6 +275,10 @@
     if (value === 0) return "On time";
     if (value > 0) return `+${value}m ${positiveLabel}`;
     return `${value}m early`;
+  }
+
+  function humanizeStatus(value: string) {
+    return value.replaceAll("_", " ");
   }
 
   function formatMinuteOfDay(totalMinutes: number) {
@@ -270,13 +333,129 @@
     }
   }
 
-  function timelineTone(bucket: TimelineBucket) {
-    if (bucket.status === "active") return "timeline-bucket timeline-bucket--active";
-    if (bucket.status === "idle") return "timeline-bucket timeline-bucket--idle";
-    if (bucket.status === "after_end") return "timeline-bucket timeline-bucket--after";
-    if (bucket.status === "before_start") return "timeline-bucket timeline-bucket--before";
-    return "timeline-bucket timeline-bucket--inactive";
+  function statusRailTone(bucket: TimelineBucket) {
+    if (bucket.status === "active") return "status-rail__segment status-rail__segment--active";
+    if (bucket.status === "idle") return "status-rail__segment status-rail__segment--idle";
+    if (bucket.status === "after_end") return "status-rail__segment status-rail__segment--after";
+    if (bucket.status === "before_start") return "status-rail__segment status-rail__segment--before";
+    return "status-rail__segment status-rail__segment--inactive";
   }
+
+  function getSeriesValue(datum: ActivityChartDatum | null | undefined, key: string) {
+    const value = datum?.[key];
+    return typeof value === "number" ? value : 0;
+  }
+
+  const topLanguageKeys = $derived.by(() => {
+    const totals = new Map<string, number>();
+    const buckets = selected_user?.current_day.timeline_buckets || [];
+
+    for (const bucket of buckets) {
+      for (const stat of bucket.language_breakdown) {
+        if (stat.coding_seconds <= 0) continue;
+        totals.set(stat.language, (totals.get(stat.language) || 0) + stat.coding_seconds);
+      }
+    }
+
+    return Array.from(totals.entries())
+      .sort((left, right) => {
+        if (right[1] !== left[1]) return right[1] - left[1];
+        return left[0].localeCompare(right[0]);
+      })
+      .slice(0, 5)
+      .map(([language]) => language);
+  });
+
+  const hasOtherLanguages = $derived.by(() => {
+    const topLanguages = new Set(topLanguageKeys);
+    const buckets = selected_user?.current_day.timeline_buckets || [];
+
+    for (const bucket of buckets) {
+      for (const stat of bucket.language_breakdown) {
+        if (stat.coding_seconds <= 0) continue;
+        if (!topLanguages.has(stat.language)) return true;
+      }
+    }
+
+    return false;
+  });
+
+  const chartSeries = $derived.by<ActivityChartSeries[]>(() => {
+    if (chartMode === "churn") {
+      return [
+        { key: "line_additions", label: "Additions", color: "#4ade80" },
+        { key: "line_deletions", label: "Deletions", color: "#f87171" },
+      ];
+    }
+
+    const baseSeries = topLanguageKeys.map((language, index) => ({
+      key: language,
+      label: language,
+      color: LANGUAGE_COLORS[index % LANGUAGE_COLORS.length],
+    }));
+
+    if (hasOtherLanguages) {
+      baseSeries.push({
+        key: "Other",
+        label: "Other",
+        color: "#94a3b8",
+      });
+    }
+
+    return baseSeries;
+  });
+
+  const chartData = $derived.by<ActivityChartDatum[]>(() => {
+    const buckets = selected_user?.current_day.timeline_buckets || [];
+
+    if (chartMode === "churn") {
+      return buckets.map((bucket) => ({
+        bucket_label: formatShortTime(bucket.bucket_started_at),
+        bucket_started_at: bucket.bucket_started_at,
+        status: bucket.status,
+        coding_seconds: bucket.coding_seconds,
+        write_heartbeats_count: bucket.write_heartbeats_count,
+        line_additions: bucket.line_additions,
+        line_deletions: bucket.line_deletions,
+      }));
+    }
+
+    const topLanguages = new Set(topLanguageKeys);
+
+    return buckets.map((bucket) => {
+      const row: ActivityChartDatum = {
+        bucket_label: formatShortTime(bucket.bucket_started_at),
+        bucket_started_at: bucket.bucket_started_at,
+        status: bucket.status,
+        coding_seconds: bucket.coding_seconds,
+      };
+      let otherSeconds = 0;
+
+      for (const language of topLanguageKeys) {
+        row[language] = 0;
+      }
+
+      for (const stat of bucket.language_breakdown) {
+        if (stat.coding_seconds <= 0) continue;
+
+        if (topLanguages.has(stat.language)) {
+          row[stat.language] = stat.coding_seconds;
+        } else {
+          otherSeconds += stat.coding_seconds;
+        }
+      }
+
+      if (hasOtherLanguages) {
+        row.Other = otherSeconds;
+      }
+
+      return row;
+    });
+  });
+
+  const chartYAxisFormat = $derived.by(() => (
+    chartMode === "churn" ? formatLineAxis : formatDuration
+  ));
 </script>
 
 <svelte:head>
@@ -339,9 +518,9 @@
       </select>
     </label>
     <div class="flex items-end">
-      <button type="submit" class="w-full rounded-xl bg-primary px-4 py-2 font-semibold text-black">
+      <Button type="submit" variant="primary" class="w-full rounded-xl">
         Apply filters
-      </button>
+      </Button>
     </div>
   </form>
 
@@ -530,25 +709,148 @@
             <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 class="m-0 text-lg font-semibold text-surface-content">
-                  5-minute presence ribbon
+                  5-minute activity chart
                 </h3>
                 <p class="m-1 text-sm text-muted">
-                  Active means the last heartbeat is within five minutes. Idle means the last
-                  heartbeat is within fifteen minutes. Presence includes non-coding work;
-                  attendance does not depend on the AI heuristic.
+                  Line churn shows additions and deletions per bucket. Language mode stacks
+                  coding seconds by language. Presence remains visible in the status rail.
                 </p>
+              </div>
+              <div class="activity-chart__controls">
+                <Button
+                  type="button"
+                  unstyled
+                  class={chartMode === "churn" ? "chart-mode-button chart-mode-button--active" : "chart-mode-button"}
+                  onclick={() => (chartMode = "churn")}
+                >
+                  Adds / Deletes
+                </Button>
+                <Button
+                  type="button"
+                  unstyled
+                  class={chartMode === "languages" ? "chart-mode-button chart-mode-button--active" : "chart-mode-button"}
+                  onclick={() => (chartMode = "languages")}
+                >
+                  Languages
+                </Button>
+              </div>
+            </div>
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <div class="chart-legend">
+                {#each chartSeries as series}
+                  <span class="chart-legend__item">
+                    <span
+                      class="chart-legend__swatch"
+                      style:background-color={series.color}
+                    ></span>
+                    <span>{series.label}</span>
+                  </span>
+                {/each}
               </div>
               <div class="text-xs text-muted">
                 {selected_user.current_day.timeline_buckets.length} buckets
               </div>
             </div>
-            <div class="timeline-grid">
-              {#each selected_user.current_day.timeline_buckets as bucket}
-                <div
-                  class={timelineTone(bucket)}
-                  title={`${formatDateTime(bucket.bucket_started_at)} | ${bucket.status} | ${formatDuration(bucket.coding_seconds)} coding | ${bucket.write_heartbeats_count} writes`}
-                ></div>
-              {/each}
+
+            {#if chartSeries.length === 0}
+              <div class="rounded-xl border border-surface-200 bg-dark p-6 text-sm text-muted">
+                No language-attributed coding activity for the selected day yet.
+              </div>
+            {:else}
+              <div class="activity-chart-shell">
+                <BarChart
+                  data={chartData}
+                  x="bucket_label"
+                  series={chartSeries}
+                  seriesLayout="stack"
+                  padding={chartPadding}
+                  props={{
+                    yAxis: {
+                      format: chartYAxisFormat,
+                    },
+                  }}
+                >
+                  <svelte:fragment slot="tooltip">
+                    <Tooltip.Root let:data>
+                      {#if data}
+                        <Tooltip.Header
+                          value={`${formatDateTime(String(data.bucket_started_at))} · ${humanizeStatus(String(data.status))}`}
+                        />
+                        <Tooltip.List>
+                          {#if chartMode === "churn"}
+                            <Tooltip.Item
+                              label="additions"
+                              value={getSeriesValue(data, "line_additions")}
+                              color="#4ade80"
+                              format={formatLineCount}
+                              valueAlign="right"
+                            />
+                            <Tooltip.Item
+                              label="deletions"
+                              value={getSeriesValue(data, "line_deletions")}
+                              color="#f87171"
+                              format={formatLineCount}
+                              valueAlign="right"
+                            />
+                            <Tooltip.Item
+                              label="coding"
+                              value={getSeriesValue(data, "coding_seconds")}
+                              format={formatDuration}
+                              valueAlign="right"
+                            />
+                            <Tooltip.Item
+                              label="writes"
+                              value={getSeriesValue(data, "write_heartbeats_count")}
+                              valueAlign="right"
+                            />
+                          {:else}
+                            {@const seriesItems = [...chartSeries].filter((series) => getSeriesValue(data, series.key) > 0)}
+                            {#each seriesItems as series}
+                              <Tooltip.Item
+                                label={series.label}
+                                value={getSeriesValue(data, series.key)}
+                                color={series.color}
+                                format={formatDuration}
+                                valueAlign="right"
+                              />
+                            {/each}
+                            <Tooltip.Separator />
+                            <Tooltip.Item
+                              label="total coding"
+                              value={getSeriesValue(data, "coding_seconds")}
+                              format={formatDuration}
+                              valueAlign="right"
+                            />
+                          {/if}
+                        </Tooltip.List>
+                      {/if}
+                    </Tooltip.Root>
+                  </svelte:fragment>
+                </BarChart>
+              </div>
+            {/if}
+
+            <div class="mt-4 grid gap-2">
+              <div class="flex items-center justify-between gap-3">
+                <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
+                  Presence status
+                </p>
+                <span class="text-xs text-muted">
+                  Active = last heartbeat within 5m, idle within 15m
+                </span>
+              </div>
+              <div
+                class="status-rail"
+                data-bucket-count={selected_user.current_day.timeline_buckets.length}
+                style:grid-template-columns={`repeat(${selected_user.current_day.timeline_buckets.length}, minmax(0, 1fr))`}
+              >
+                {#each selected_user.current_day.timeline_buckets as bucket}
+                  <div
+                    class={statusRailTone(bucket)}
+                    title={`${formatDateTime(bucket.bucket_started_at)} | ${humanizeStatus(bucket.status)} | ${formatDuration(bucket.presence_seconds)} presence`}
+                  ></div>
+                {/each}
+              </div>
             </div>
           </div>
 
@@ -705,9 +1007,8 @@
                         <span>Expected start</span>
                         <input
                           class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
-                          type="text"
-                          inputmode="numeric"
-                          pattern="[0-9]{2}:[0-9]{2}"
+                          type="time"
+                          step="60"
                           name="profile[expected_start_minute_local]"
                           value={formatMinuteOfDay(selected_user.schedule.expected_start_minute_local)}
                           placeholder="09:00"
@@ -717,9 +1018,8 @@
                         <span>Expected finish</span>
                         <input
                           class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
-                          type="text"
-                          inputmode="numeric"
-                          pattern="[0-9]{2}:[0-9]{2}"
+                          type="time"
+                          step="60"
                           name="profile[expected_end_minute_local]"
                           value={formatMinuteOfDay(selected_user.schedule.expected_end_minute_local)}
                           placeholder="17:00"
@@ -776,9 +1076,9 @@
                       />
                       <span>Monitoring enabled</span>
                     </label>
-                    <button type="submit" class="rounded-xl bg-primary px-4 py-2 font-semibold text-black">
+                    <Button type="submit" variant="primary" class="rounded-xl">
                       Save schedule
-                    </button>
+                    </Button>
                   </form>
                 {:else}
                   <div class="rounded-xl border border-surface-200 bg-dark p-4 text-sm text-muted">
@@ -1002,35 +1302,92 @@
     font-size: 0.9rem;
   }
 
-  .timeline-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(10px, 1fr));
-    gap: 0.3rem;
+  .activity-chart__controls {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
   }
 
-  .timeline-bucket {
-    height: 1.35rem;
+  .chart-mode-button {
+    border: 1px solid var(--color-surface-200);
+    background: var(--color-dark);
+    color: var(--color-muted);
+    border-radius: 999px;
+    padding: 0.45rem 0.85rem;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    transition:
+      background 120ms ease,
+      color 120ms ease,
+      border-color 120ms ease;
+  }
+
+  .chart-mode-button--active {
+    background: rgba(255, 191, 72, 0.18);
+    border-color: rgba(255, 191, 72, 0.45);
+    color: var(--color-surface-content);
+  }
+
+  .chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .chart-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--color-muted);
+  }
+
+  .chart-legend__swatch {
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 999px;
+    display: inline-block;
+  }
+
+  .activity-chart-shell {
+    height: 19rem;
+    border-radius: 1rem;
+    border: 1px solid var(--color-surface-200);
+    background: var(--color-dark);
+    padding: 0.75rem 0.75rem 0.5rem;
+  }
+
+  .status-rail {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .status-rail__segment {
+    height: 0.5rem;
     border-radius: 999px;
     border: 1px solid transparent;
   }
 
-  .timeline-bucket--active {
+  .status-rail__segment--active {
     background: rgba(99, 255, 180, 0.32);
   }
 
-  .timeline-bucket--idle {
+  .status-rail__segment--idle {
     background: rgba(255, 215, 107, 0.32);
   }
 
-  .timeline-bucket--inactive {
+  .status-rail__segment--inactive {
     background: rgba(255, 107, 107, 0.28);
   }
 
-  .timeline-bucket--before {
+  .status-rail__segment--before {
     background: rgba(160, 174, 192, 0.24);
   }
 
-  .timeline-bucket--after {
+  .status-rail__segment--after {
     background: rgba(111, 179, 255, 0.28);
   }
 
