@@ -19,7 +19,7 @@ CI.run do
   step "Frontend: Lint", "bun run format:svelte:check"
 
   if success?
-    step "Signoff: All systems go. Ready for merge and deploy."
+    heading "Signoff: All systems go. Ready for merge and deploy.", type: :title
   else
     failure "Signoff: CI failed. Do not merge or deploy.", "Fix the issues and try again."
   end
