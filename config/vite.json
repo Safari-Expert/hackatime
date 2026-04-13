@@ -1,7 +1,9 @@
 {
   "all": {
     "sourceCodeDir": "app/javascript",
-    "watchAdditionalPaths": []
+    "watchAdditionalPaths": [
+      "safari_expert/employee_monitoring/javascript"
+    ]
   },
   "development": {
     "autoBuild": true,

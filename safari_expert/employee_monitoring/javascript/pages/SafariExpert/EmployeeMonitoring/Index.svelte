@@ -206,6 +206,25 @@
     churn: ActivityChartBucket;
     languages: ActivityChartBucket;
   };
+  type ActivityChartRect = {
+    bucket_started_at: string;
+    series_key: string;
+    value: number;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    color: string;
+  };
+  type StatusChartRect = {
+    bucket_started_at: string;
+    status: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    color: string;
+  };
 
   const LANGUAGE_COLORS = [
     "#60a5fa",
@@ -230,6 +249,15 @@
     { label: "After end", className: "chart-legend__swatch--after" },
     { label: "Inactive", className: "chart-legend__swatch--inactive" },
   ];
+  const CHART_SLOT_UNITS = 18;
+  const CHART_GAP_UNITS = 4;
+  const LANGUAGE_TRACK_VIEWBOX_HEIGHT = 160;
+  const CHURN_TRACK_VIEWBOX_HEIGHT = 96;
+  const STATUS_TRACK_VIEWBOX_HEIGHT = 28;
+  const TRACK_VIEWBOX_TOP_PADDING = 8;
+  const TRACK_VIEWBOX_BOTTOM_PADDING = 6;
+  const STATUS_TRACK_BAR_HEIGHT = 18;
+  const MIN_VISIBLE_BAR_HEIGHT = 2;
 
   let csrfToken = $state("");
   let activeBucketStartedAt = $state<string | null>(null);
@@ -320,7 +348,12 @@
   }
 
   function signalTone(value: string) {
-    if (value.includes("high") || value.includes("strong") || value.includes("completed") || value.includes("on_track")) {
+    if (
+      value.includes("high") ||
+      value.includes("strong") ||
+      value.includes("completed") ||
+      value.includes("on_track")
+    ) {
       return "badge badge--good";
     }
 
@@ -348,26 +381,27 @@
     }
   }
 
-  function statusRailTone(bucket: TimelineBucket) {
-    if (bucket.status === "active") return "status-rail__segment status-rail__segment--active";
-    if (bucket.status === "idle") return "status-rail__segment status-rail__segment--idle";
-    if (bucket.status === "after_end") return "status-rail__segment status-rail__segment--after";
-    if (bucket.status === "before_start") return "status-rail__segment status-rail__segment--before";
-    return "status-rail__segment status-rail__segment--inactive";
-  }
-
-  function shouldShowBucketTick(bucket: TimelineBucket, index: number, buckets: TimelineBucket[]) {
+  function shouldShowBucketTick(
+    bucket: TimelineBucket,
+    index: number,
+    buckets: TimelineBucket[],
+  ) {
     if (buckets.length <= 18) return true;
 
     const bucketDate = new Date(bucket.bucket_started_at);
-    return index === 0 || index === buckets.length - 1 || bucketDate.getMinutes() === 0;
+    return (
+      index === 0 ||
+      index === buckets.length - 1 ||
+      bucketDate.getMinutes() === 0
+    );
   }
 
   function chartScaleMax(mode: "churn" | "languages", maxValue: number) {
     if (maxValue <= 0) return mode === "churn" ? 10 : 300;
 
     if (mode === "churn") {
-      const step = maxValue <= 20 ? 5 : maxValue <= 100 ? 10 : maxValue <= 250 ? 25 : 50;
+      const step =
+        maxValue <= 20 ? 5 : maxValue <= 100 ? 10 : maxValue <= 250 ? 25 : 50;
       return Math.ceil((maxValue * 1.1) / step) * step;
     }
 
@@ -376,15 +410,108 @@
   }
 
   function buildTickValues(maxValue: number) {
-    const values = [maxValue, Math.round((maxValue * 2) / 3), Math.round(maxValue / 3), 0];
+    const values = [
+      maxValue,
+      Math.round((maxValue * 2) / 3),
+      Math.round(maxValue / 3),
+      0,
+    ];
     return values.filter((value, index) => values.indexOf(value) === index);
+  }
+
+  function chartViewBoxWidth(bucketCount: number) {
+    if (bucketCount <= 0) return CHART_SLOT_UNITS;
+
+    return bucketCount * CHART_SLOT_UNITS + (bucketCount - 1) * CHART_GAP_UNITS;
+  }
+
+  function chartBucketX(index: number) {
+    return index * (CHART_SLOT_UNITS + CHART_GAP_UNITS);
+  }
+
+  function chartInnerHeight(trackHeight: number) {
+    return (
+      trackHeight - TRACK_VIEWBOX_TOP_PADDING - TRACK_VIEWBOX_BOTTOM_PADDING
+    );
+  }
+
+  function buildStackRects(
+    chartBuckets: ActivityChartBucket[],
+    scaleMax: number,
+    trackHeight: number,
+  ): ActivityChartRect[] {
+    const innerHeight = chartInnerHeight(trackHeight);
+
+    return chartBuckets.flatMap((chartBucket, index) => {
+      let cursor = trackHeight - TRACK_VIEWBOX_BOTTOM_PADDING;
+
+      return chartBucket.segments.flatMap((segment) => {
+        if (segment.value <= 0 || scaleMax <= 0) return [];
+
+        const remainingHeight = cursor - TRACK_VIEWBOX_TOP_PADDING;
+        if (remainingHeight <= 0) return [];
+
+        const rawHeight = (segment.value / scaleMax) * innerHeight;
+        const height = Math.min(
+          remainingHeight,
+          Math.max(rawHeight, MIN_VISIBLE_BAR_HEIGHT),
+        );
+
+        cursor -= height;
+
+        return {
+          bucket_started_at: chartBucket.bucket.bucket_started_at,
+          series_key: segment.key,
+          value: segment.value,
+          x: chartBucketX(index),
+          y: cursor,
+          width: CHART_SLOT_UNITS,
+          height,
+          color: segment.color,
+        };
+      });
+    });
+  }
+
+  function statusFillColor(status: string) {
+    switch (status) {
+      case "active":
+        return "#3f7f66";
+      case "idle":
+        return "#8a7744";
+      case "before_start":
+        return "#4b5563";
+      case "after_end":
+        return "#475569";
+      default:
+        return "#7f4d4d";
+    }
+  }
+
+  function buildStatusRects(buckets: TimelineBucket[]): StatusChartRect[] {
+    const y = Math.round(
+      (STATUS_TRACK_VIEWBOX_HEIGHT - STATUS_TRACK_BAR_HEIGHT) / 2,
+    );
+
+    return buckets.map((bucket, index) => ({
+      bucket_started_at: bucket.bucket_started_at,
+      status: bucket.status,
+      x: chartBucketX(index),
+      y,
+      width: CHART_SLOT_UNITS,
+      height: STATUS_TRACK_BAR_HEIGHT,
+      color: statusFillColor(bucket.status),
+    }));
   }
 
   function chartAxisFormat(mode: "churn" | "languages", value: number) {
     return mode === "churn" ? formatLineAxis(value) : formatDuration(value);
   }
 
-  function buildBucketTitle(chartBucket: ActivityChartBucket, mode: "churn" | "languages") {
+  function buildBucketTitle(
+    chartBucket: ActivityChartBucket,
+    mode: "churn" | "languages",
+  ) {
     const lines = [
       `${formatDateTime(chartBucket.bucket.bucket_started_at)} · ${humanizeStatus(chartBucket.bucket.status)}`,
     ];
@@ -392,10 +519,14 @@
     if (mode === "churn") {
       lines.push(`Additions: ${chartBucket.bucket.line_additions}`);
       lines.push(`Deletions: ${chartBucket.bucket.line_deletions}`);
-      lines.push(`Coding: ${formatDuration(chartBucket.bucket.coding_seconds)}`);
+      lines.push(
+        `Coding: ${formatDuration(chartBucket.bucket.coding_seconds)}`,
+      );
       lines.push(`Writes: ${chartBucket.bucket.write_heartbeats_count}`);
     } else {
-      lines.push(`Coding: ${formatDuration(chartBucket.bucket.coding_seconds)}`);
+      lines.push(
+        `Coding: ${formatDuration(chartBucket.bucket.coding_seconds)}`,
+      );
       lines.push(`Languages: ${chartBucket.segments.length}`);
 
       for (const segment of chartBucket.segments) {
@@ -408,10 +539,12 @@
   }
 
   function bucketHasVisibleActivity(bucket: TimelineBucket) {
-    return bucket.presence_seconds > 0 ||
+    return (
+      bucket.presence_seconds > 0 ||
       bucket.coding_seconds > 0 ||
       bucket.line_additions > 0 ||
-      bucket.line_deletions > 0;
+      bucket.line_deletions > 0
+    );
   }
 
   function defaultTimelineBucket(buckets: TimelineBucket[]) {
@@ -422,7 +555,9 @@
     return buckets[buckets.length - 1] || null;
   }
 
-  const timelineBuckets = $derived.by(() => selected_user?.current_day.timeline_buckets || []);
+  const timelineBuckets = $derived.by(
+    () => selected_user?.current_day.timeline_buckets || [],
+  );
 
   const topLanguageKeys = $derived.by(() => {
     const totals = new Map<string, number>();
@@ -430,7 +565,10 @@
     for (const bucket of timelineBuckets) {
       for (const stat of bucket.language_breakdown) {
         if (stat.coding_seconds <= 0) continue;
-        totals.set(stat.language, (totals.get(stat.language) || 0) + stat.coding_seconds);
+        totals.set(
+          stat.language,
+          (totals.get(stat.language) || 0) + stat.coding_seconds,
+        );
       }
     }
 
@@ -474,30 +612,35 @@
     return baseSeries;
   });
 
-  const churnChartBuckets = $derived.by<ActivityChartBucket[]>(() => (
+  const churnChartBuckets = $derived.by<ActivityChartBucket[]>(() =>
     timelineBuckets.map((bucket, index) => ({
       bucket,
       total: bucket.line_additions + bucket.line_deletions,
       segments: CHURN_SERIES.map((series) => ({
         ...series,
-        value: series.key === "line_additions" ? bucket.line_additions : bucket.line_deletions,
+        value:
+          series.key === "line_additions"
+            ? bucket.line_additions
+            : bucket.line_deletions,
       })).filter((segment) => segment.value > 0),
       tick_label: shouldShowBucketTick(bucket, index, timelineBuckets)
         ? formatShortTime(bucket.bucket_started_at)
         : "",
-    }))
-  ));
+    })),
+  );
 
   const languageChartBuckets = $derived.by<ActivityChartBucket[]>(() => {
     const topLanguages = new Set(topLanguageKeys);
 
     return timelineBuckets.map((bucket, index) => {
-      const segments: ActivityChartSegment[] = topLanguageKeys.map((language, languageIndex) => ({
-        key: language,
-        label: language,
-        color: LANGUAGE_COLORS[languageIndex % LANGUAGE_COLORS.length],
-        value: 0,
-      }));
+      const segments: ActivityChartSegment[] = topLanguageKeys.map(
+        (language, languageIndex) => ({
+          key: language,
+          label: language,
+          color: LANGUAGE_COLORS[languageIndex % LANGUAGE_COLORS.length],
+          value: 0,
+        }),
+      );
       let otherSeconds = 0;
 
       for (const stat of bucket.language_breakdown) {
@@ -533,29 +676,35 @@
     });
   });
 
-  const churnScaleMax = $derived.by(() => (
-    chartScaleMax("churn", Math.max(0, ...churnChartBuckets.map((bucket) => bucket.total)))
-  ));
+  const churnScaleMax = $derived.by(() =>
+    chartScaleMax(
+      "churn",
+      Math.max(0, ...churnChartBuckets.map((bucket) => bucket.total)),
+    ),
+  );
 
-  const languageScaleMax = $derived.by(() => (
-    chartScaleMax("languages", Math.max(0, ...languageChartBuckets.map((bucket) => bucket.total)))
-  ));
+  const languageScaleMax = $derived.by(() =>
+    chartScaleMax(
+      "languages",
+      Math.max(0, ...languageChartBuckets.map((bucket) => bucket.total)),
+    ),
+  );
 
   const activeTimelineIndex = $derived.by(() => {
     if (timelineBuckets.length === 0) return -1;
     if (activeBucketStartedAt) {
-      const hoveredIndex = timelineBuckets.findIndex((bucket) => (
-        bucket.bucket_started_at === activeBucketStartedAt
-      ));
+      const hoveredIndex = timelineBuckets.findIndex(
+        (bucket) => bucket.bucket_started_at === activeBucketStartedAt,
+      );
       if (hoveredIndex >= 0) return hoveredIndex;
     }
 
     const fallbackBucket = defaultTimelineBucket(timelineBuckets);
     if (!fallbackBucket) return -1;
 
-    return timelineBuckets.findIndex((bucket) => (
-      bucket.bucket_started_at === fallbackBucket.bucket_started_at
-    ));
+    return timelineBuckets.findIndex(
+      (bucket) => bucket.bucket_started_at === fallbackBucket.bucket_started_at,
+    );
   });
 
   const activeTimelineBucket = $derived.by<FocusedActivityBucket | null>(() => {
@@ -568,9 +717,13 @@
     };
   });
 
-  const hasChurnData = $derived.by(() => churnChartBuckets.some((bucket) => bucket.total > 0));
+  const hasChurnData = $derived.by(() =>
+    churnChartBuckets.some((bucket) => bucket.total > 0),
+  );
 
-  const hasLanguageData = $derived.by(() => languageChartBuckets.some((bucket) => bucket.total > 0));
+  const hasLanguageData = $derived.by(() =>
+    languageChartBuckets.some((bucket) => bucket.total > 0),
+  );
 
   const bucketCount = $derived.by(() => Math.max(timelineBuckets.length, 1));
 
@@ -582,18 +735,52 @@
     return "1.08rem";
   });
 
-  const axisTickLabels = $derived.by(() => (
+  const axisTickLabels = $derived.by(() =>
     timelineBuckets.map((bucket, index) => ({
       bucket_started_at: bucket.bucket_started_at,
-      label: shouldShowBucketTick(bucket, index, timelineBuckets) ? formatShortTime(bucket.bucket_started_at) : "",
-    }))
-  ));
+      label: shouldShowBucketTick(bucket, index, timelineBuckets)
+        ? formatShortTime(bucket.bucket_started_at)
+        : "",
+    })),
+  );
+
+  const timelineViewBoxWidth = $derived.by(() =>
+    chartViewBoxWidth(bucketCount),
+  );
+
+  const languageChartRects = $derived.by(() =>
+    buildStackRects(
+      languageChartBuckets,
+      languageScaleMax,
+      LANGUAGE_TRACK_VIEWBOX_HEIGHT,
+    ),
+  );
+
+  const churnChartRects = $derived.by(() =>
+    buildStackRects(
+      churnChartBuckets,
+      churnScaleMax,
+      CHURN_TRACK_VIEWBOX_HEIGHT,
+    ),
+  );
+
+  const statusChartRects = $derived.by(() => buildStatusRects(timelineBuckets));
 
   const activityChartSummaryStats = $derived.by<ActivitySummaryStat[]>(() => {
-    const totalAdditions = timelineBuckets.reduce((sum, bucket) => sum + bucket.line_additions, 0);
-    const totalDeletions = timelineBuckets.reduce((sum, bucket) => sum + bucket.line_deletions, 0);
-    const bucketsWithChurn = churnChartBuckets.filter((bucket) => bucket.total > 0).length;
-    const bucketsWithPresence = timelineBuckets.filter((bucket) => bucket.presence_seconds > 0).length;
+    const totalAdditions = timelineBuckets.reduce(
+      (sum, bucket) => sum + bucket.line_additions,
+      0,
+    );
+    const totalDeletions = timelineBuckets.reduce(
+      (sum, bucket) => sum + bucket.line_deletions,
+      0,
+    );
+    const bucketsWithChurn = churnChartBuckets.filter(
+      (bucket) => bucket.total > 0,
+    ).length;
+    const bucketsWithPresence = timelineBuckets.filter(
+      (bucket) => bucket.presence_seconds > 0,
+    ).length;
     const activeLanguages = new Set<string>();
 
     for (const bucket of timelineBuckets) {
@@ -602,7 +789,9 @@
       }
     }
 
-    const bucketsWithCoding = languageChartBuckets.filter((bucket) => bucket.total > 0).length;
+    const bucketsWithCoding = languageChartBuckets.filter(
+      (bucket) => bucket.total > 0,
+    ).length;
 
     return [
       {
@@ -613,9 +802,10 @@
       {
         label: "Language mix",
         value: `${activeLanguages.size}`,
-        detail: activeLanguages.size === 0
-          ? "No language-attributed coding yet"
-          : `${Math.min(topLanguageKeys.length, activeLanguages.size)} highlighted + ${hasOtherLanguages ? "Other grouped" : "no overflow group"}`,
+        detail:
+          activeLanguages.size === 0
+            ? "No language-attributed coding yet"
+            : `${Math.min(topLanguageKeys.length, activeLanguages.size)} highlighted + ${hasOtherLanguages ? "Other grouped" : "no overflow group"}`,
       },
       {
         label: "Line churn",
@@ -652,14 +842,20 @@
           time-tracking.
         </p>
       </div>
-      <div class="rounded-xl border border-surface-200 bg-dark px-4 py-3 text-sm text-muted">
+      <div
+        class="rounded-xl border border-surface-200 bg-dark px-4 py-3 text-sm text-muted"
+      >
         <div>Generated: {formatDateTime(overview.generated_at)}</div>
         <div>Server timezone: {overview.timezone}</div>
       </div>
     </div>
   </div>
 
-  <form method="GET" action={page_path} class="mb-6 grid gap-3 rounded-2xl border border-surface-200 bg-dark p-4 lg:grid-cols-[1.6fr_220px_auto]">
+  <form
+    method="GET"
+    action={page_path}
+    class="mb-6 grid gap-3 rounded-2xl border border-surface-200 bg-dark p-4 lg:grid-cols-[1.6fr_220px_auto]"
+  >
     {#if selected_user}
       <input type="hidden" name="user_id" value={selected_user.id} />
     {/if}
@@ -679,15 +875,43 @@
         class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
         name="status"
       >
-        <option value="" selected={overview.filters.status === ""}>All statuses</option>
-        <option value="active" selected={overview.filters.status === "active"}>Active in window</option>
-        <option value="idle" selected={overview.filters.status === "idle"}>Idle in window</option>
-        <option value="inactive" selected={overview.filters.status === "inactive"}>Inactive</option>
-        <option value="before_start" selected={overview.filters.status === "before_start"}>Before start</option>
-        <option value="after_end" selected={overview.filters.status === "after_end"}>After end</option>
-        <option value="not_started_yet" selected={overview.filters.status === "not_started_yet"}>Not started yet</option>
-        <option value="ended_early" selected={overview.filters.status === "ended_early"}>Ended early</option>
-        <option value="after_hours" selected={overview.filters.status === "after_hours"}>After-hours active</option>
+        <option value="" selected={overview.filters.status === ""}
+          >All statuses</option
+        >
+        <option value="active" selected={overview.filters.status === "active"}
+          >Active in window</option
+        >
+        <option value="idle" selected={overview.filters.status === "idle"}
+          >Idle in window</option
+        >
+        <option
+          value="inactive"
+          selected={overview.filters.status === "inactive"}>Inactive</option
+        >
+        <option
+          value="before_start"
+          selected={overview.filters.status === "before_start"}
+          >Before start</option
+        >
+        <option
+          value="after_end"
+          selected={overview.filters.status === "after_end"}>After end</option
+        >
+        <option
+          value="not_started_yet"
+          selected={overview.filters.status === "not_started_yet"}
+          >Not started yet</option
+        >
+        <option
+          value="ended_early"
+          selected={overview.filters.status === "ended_early"}
+          >Ended early</option
+        >
+        <option
+          value="after_hours"
+          selected={overview.filters.status === "after_hours"}
+          >After-hours active</option
+        >
       </select>
     </label>
     <div class="flex items-end">
@@ -698,16 +922,11 @@
   </form>
 
   <section class="mb-6 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-    {#each [
-      { label: "Monitored users", value: overview.summary.monitored_users, tone: "summary-card" },
-      { label: "Active in window", value: overview.summary.active_in_window, tone: "summary-card summary-card--active" },
-      { label: "Idle in window", value: overview.summary.idle_in_window, tone: "summary-card summary-card--idle" },
-      { label: "Not started", value: overview.summary.not_started_yet, tone: "summary-card summary-card--warn" },
-      { label: "Ended early", value: overview.summary.ended_early, tone: "summary-card summary-card--critical" },
-      { label: "After-hours active", value: overview.summary.after_hours_active, tone: "summary-card summary-card--after" },
-    ] as card}
+    {#each [{ label: "Monitored users", value: overview.summary.monitored_users, tone: "summary-card" }, { label: "Active in window", value: overview.summary.active_in_window, tone: "summary-card summary-card--active" }, { label: "Idle in window", value: overview.summary.idle_in_window, tone: "summary-card summary-card--idle" }, { label: "Not started", value: overview.summary.not_started_yet, tone: "summary-card summary-card--warn" }, { label: "Ended early", value: overview.summary.ended_early, tone: "summary-card summary-card--critical" }, { label: "After-hours active", value: overview.summary.after_hours_active, tone: "summary-card summary-card--after" }] as card}
       <div class={card.tone}>
-        <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">{card.label}</p>
+        <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
+          {card.label}
+        </p>
         <p class="mt-3 text-3xl font-bold text-surface-content">{card.value}</p>
       </div>
     {/each}
@@ -729,7 +948,9 @@
       </div>
 
       {#if overview.roster.length === 0}
-        <div class="rounded-2xl border border-surface-200 bg-surface p-8 text-center text-muted">
+        <div
+          class="rounded-2xl border border-surface-200 bg-surface p-8 text-center text-muted"
+        >
           No monitored developers match the current filters.
         </div>
       {:else}
@@ -751,18 +972,26 @@
                   <td>
                     <Link href={row.selection_path} class="row-link">
                       <div class="grid gap-1">
-                        <span class="font-semibold text-surface-content">{row.display_name}</span>
+                        <span class="font-semibold text-surface-content"
+                          >{row.display_name}</span
+                        >
                         <span class="text-xs text-muted">
                           {row.username ? `@${row.username}` : `User ${row.id}`}
                         </span>
-                        <span class="text-xs text-muted">{row.schedule_label}</span>
+                        <span class="text-xs text-muted"
+                          >{row.schedule_label}</span
+                        >
                       </div>
                     </Link>
                   </td>
                   <td>
                     <div class="grid gap-2">
-                      <span class={statusTone(row.status, row.after_hours_active)}>
-                        {row.after_hours_active ? "after hours" : row.status.replaceAll("_", " ")}
+                      <span
+                        class={statusTone(row.status, row.after_hours_active)}
+                      >
+                        {row.after_hours_active
+                          ? "after hours"
+                          : row.status.replaceAll("_", " ")}
                       </span>
                       <span class="text-xs text-muted">
                         Last seen {formatDateTime(row.last_seen_at)}
@@ -772,7 +1001,9 @@
                   <td>
                     <div class="grid gap-1 text-sm text-surface-content">
                       <span>Start: {formatDelta(row.start_delta_minutes)}</span>
-                      <span>End: {formatDelta(row.end_delta_minutes, "over")}</span>
+                      <span
+                        >End: {formatDelta(row.end_delta_minutes, "over")}</span
+                      >
                       <span class="text-xs text-muted">
                         First seen {formatDateTime(row.first_seen_at)}
                       </span>
@@ -789,12 +1020,16 @@
                   </td>
                   <td>
                     <div class="grid gap-1 text-sm text-surface-content">
-                      <span>{row.write_heartbeats_count} writes · {row.commit_count} commits</span>
+                      <span
+                        >{row.write_heartbeats_count} writes · {row.commit_count}
+                        commits</span
+                      >
                       <span>
                         +{row.commit_line_additions} / -{row.commit_line_deletions}
                       </span>
                       <span class="text-xs text-muted">
-                        {row.unique_projects_count} projects · {row.unique_languages_count} langs
+                        {row.unique_projects_count} projects · {row.unique_languages_count}
+                        langs
                       </span>
                     </div>
                   </td>
@@ -835,12 +1070,19 @@
                   {selected_user.display_name}
                 </h2>
                 <p class="m-0 text-sm text-muted">
-                  {selected_user.username ? `@${selected_user.username}` : `User ${selected_user.id}`}
+                  {selected_user.username
+                    ? `@${selected_user.username}`
+                    : `User ${selected_user.id}`}
                   {" · "}
                   {selected_user.schedule.label}
                 </p>
               </div>
-              <span class={statusTone(selected_user.current_day.status, selected_user.current_day.after_hours_active)}>
+              <span
+                class={statusTone(
+                  selected_user.current_day.status,
+                  selected_user.current_day.after_hours_active,
+                )}
+              >
                 {selected_user.current_day.after_hours_active
                   ? "after-hours active"
                   : selected_user.current_day.status.replaceAll("_", " ")}
@@ -851,10 +1093,15 @@
               <div class="metric-card">
                 <p class="metric-card__label">Attendance</p>
                 <p class="metric-card__value">
-                  {selected_user.current_day.attendance_signal.replaceAll("_", " ")}
+                  {selected_user.current_day.attendance_signal.replaceAll(
+                    "_",
+                    " ",
+                  )}
                 </p>
                 <p class="metric-card__hint">
-                  Start {formatDelta(selected_user.current_day.start_delta_minutes)}
+                  Start {formatDelta(
+                    selected_user.current_day.start_delta_minutes,
+                  )}
                 </p>
               </div>
               <div class="metric-card">
@@ -863,7 +1110,8 @@
                   {selected_user.current_day.activity_signal}
                 </p>
                 <p class="metric-card__hint">
-                  {formatDuration(selected_user.current_day.coding_seconds)} coding · {formatPercent(selected_user.current_day.coverage_percent)} coverage
+                  {formatDuration(selected_user.current_day.coding_seconds)} coding
+                  · {formatPercent(selected_user.current_day.coverage_percent)} coverage
                 </p>
               </div>
               <div class="metric-card">
@@ -872,7 +1120,8 @@
                   {selected_user.current_day.delivery_signal}
                 </p>
                 <p class="metric-card__hint">
-                  {selected_user.current_day.commit_count} commits · {selected_user.current_day.write_heartbeats_count} writes
+                  {selected_user.current_day.commit_count} commits · {selected_user
+                    .current_day.write_heartbeats_count} writes
                 </p>
               </div>
             </div>
@@ -885,9 +1134,10 @@
                   5-minute activity chart
                 </h3>
                 <p class="m-0 text-sm text-muted">
-                  One shared bucket ladder drives all three panes. Languages stay in the
-                  primary panel, raw additions and deletions live underneath as a subchart,
-                  and presence status sits on the same communal time axis at the bottom.
+                  One shared bucket ladder drives all three panes. Languages
+                  stay in the primary panel, raw additions and deletions live
+                  underneath as a subchart, and presence status sits on the same
+                  communal time axis at the bottom.
                 </p>
               </div>
 
@@ -895,21 +1145,41 @@
                 <div class="activity-chart__focus-card">
                   <p class="activity-chart__focus-label">Focused bucket</p>
                   <strong class="text-surface-content">
-                    {formatDateTime(activeTimelineBucket.bucket.bucket_started_at)}
+                    {formatDateTime(
+                      activeTimelineBucket.bucket.bucket_started_at,
+                    )}
                   </strong>
                   <p class="m-0 text-sm text-muted">
-                    {humanizeStatus(activeTimelineBucket.bucket.status)} · {formatDuration(activeTimelineBucket.bucket.presence_seconds)} presence
+                    {humanizeStatus(activeTimelineBucket.bucket.status)} · {formatDuration(
+                      activeTimelineBucket.bucket.presence_seconds,
+                    )} presence
                   </p>
                   <div class="activity-chart__focus-grid">
-                    <span>{formatDuration(activeTimelineBucket.bucket.coding_seconds)} coding</span>
-                    <span>+{activeTimelineBucket.bucket.line_additions} adds</span>
-                    <span>-{activeTimelineBucket.bucket.line_deletions} deletes</span>
-                    <span>{activeTimelineBucket.bucket.write_heartbeats_count} writes</span>
+                    <span
+                      >{formatDuration(
+                        activeTimelineBucket.bucket.coding_seconds,
+                      )} coding</span
+                    >
+                    <span
+                      >+{activeTimelineBucket.bucket.line_additions} adds</span
+                    >
+                    <span
+                      >-{activeTimelineBucket.bucket.line_deletions} deletes</span
+                    >
+                    <span
+                      >{activeTimelineBucket.bucket.write_heartbeats_count} writes</span
+                    >
                   </div>
                   {#if activeTimelineBucket.languages.segments.length > 0}
-                    <div class="activity-chart__focus-grid activity-chart__focus-grid--compact">
+                    <div
+                      class="activity-chart__focus-grid activity-chart__focus-grid--compact"
+                    >
                       {#each activeTimelineBucket.languages.segments.slice(0, 3) as segment}
-                        <span>{segment.label}: {formatDuration(segment.value)}</span>
+                        <span
+                          >{segment.label}: {formatDuration(
+                            segment.value,
+                          )}</span
+                        >
                       {/each}
                     </div>
                   {/if}
@@ -932,7 +1202,9 @@
                 <p class="activity-chart__eyebrow">Languages</p>
                 <div class="chart-legend">
                   {#if languageSeries.length === 0}
-                    <span class="text-xs text-muted">No language stacks yet.</span>
+                    <span class="text-xs text-muted"
+                      >No language stacks yet.</span
+                    >
                   {:else}
                     {#each languageSeries as series}
                       <span class="chart-legend__item">
@@ -967,7 +1239,8 @@
                 <div class="chart-legend">
                   {#each PRESENCE_SERIES as series}
                     <span class="chart-legend__item">
-                      <span class={`chart-legend__swatch ${series.className}`}></span>
+                      <span class={`chart-legend__swatch ${series.className}`}
+                      ></span>
                       <span>{series.label}</span>
                     </span>
                   {/each}
@@ -985,7 +1258,9 @@
                   <div class="market-chart__axes">
                     <div class="market-chart__axis-block">
                       <p class="market-chart__axis-title">Languages</p>
-                      <p class="market-chart__axis-subtitle">Coding time by language per 5-minute bucket</p>
+                      <p class="market-chart__axis-subtitle">
+                        Coding time by language per 5-minute bucket
+                      </p>
                       <div class="market-chart__y-axis">
                         {#each buildTickValues(languageScaleMax) as tick}
                           <span>{chartAxisFormat("languages", tick)}</span>
@@ -995,7 +1270,9 @@
 
                     <div class="market-chart__axis-block">
                       <p class="market-chart__axis-title">Adds / Deletes</p>
-                      <p class="market-chart__axis-subtitle">Line churn by 5-minute bucket</p>
+                      <p class="market-chart__axis-subtitle">
+                        Line churn by 5-minute bucket
+                      </p>
                       <div class="market-chart__y-axis">
                         {#each buildTickValues(churnScaleMax) as tick}
                           <span>{chartAxisFormat("churn", tick)}</span>
@@ -1003,9 +1280,13 @@
                       </div>
                     </div>
 
-                    <div class="market-chart__axis-block market-chart__axis-block--status">
+                    <div
+                      class="market-chart__axis-block market-chart__axis-block--status"
+                    >
                       <p class="market-chart__axis-title">PRESENCE STATUS</p>
-                      <p class="market-chart__axis-subtitle">Active &lt; 5m · idle &lt; 15m</p>
+                      <p class="market-chart__axis-subtitle">
+                        Active &lt; 5m · idle &lt; 15m
+                      </p>
                     </div>
 
                     <div class="market-chart__axis-footer">
@@ -1018,127 +1299,235 @@
                       class="market-chart__timeline"
                       style={`--bucket-count: ${bucketCount}; --bucket-width: ${bucketColumnWidth};`}
                     >
-                      <div class="market-chart__track market-chart__track--languages">
-                        <div
-                          class="market-chart__grid market-chart__grid--bars"
-                          data-track="languages"
-                          data-bucket-count={bucketCount}
-                        >
-                          {#each languageChartBuckets as chartBucket}
-                            <div
-                              class:market-chart__slot--active={activeTimelineBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at}
-                              class="market-chart__slot"
-                            >
-                              <Button
-                                type="button"
-                                unstyled
-                                class={activeTimelineBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at
-                                  ? "market-chart__stack market-chart__stack--active"
-                                  : "market-chart__stack"}
-                                title={buildBucketTitle(chartBucket, "languages")}
-                                aria-label={buildBucketTitle(chartBucket, "languages")}
-                                onclick={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
-                                onmouseenter={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
-                                onfocus={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
+                      <div
+                        class="market-chart__track market-chart__track--languages"
+                      >
+                        <div class="market-chart__plot">
+                          <svg
+                            class="market-chart__svg"
+                            viewBox={`0 0 ${timelineViewBoxWidth} ${LANGUAGE_TRACK_VIEWBOX_HEIGHT}`}
+                            preserveAspectRatio="none"
+                            aria-hidden="true"
+                          >
+                            {#each languageChartRects as rect}
+                              <rect
+                                class="market-chart__rect"
+                                data-bucket-started-at={rect.bucket_started_at}
+                                data-series-key={rect.series_key}
+                                data-value={rect.value}
+                                x={rect.x}
+                                y={rect.y}
+                                width={rect.width}
+                                height={rect.height}
+                                rx="4"
+                                fill={rect.color}
+                              ></rect>
+                            {/each}
+                          </svg>
+                          <div
+                            class="market-chart__grid market-chart__grid--interactive"
+                            data-track="languages"
+                            data-bucket-count={bucketCount}
+                          >
+                            {#each languageChartBuckets as chartBucket}
+                              <div
+                                class:market-chart__slot--active={activeTimelineBucket
+                                  ?.bucket.bucket_started_at ===
+                                  chartBucket.bucket.bucket_started_at}
+                                class="market-chart__slot"
+                                data-bucket-started-at={chartBucket.bucket
+                                  .bucket_started_at}
+                                data-total={chartBucket.total}
                               >
-                                {#if chartBucket.total > 0}
-                                  {#each chartBucket.segments as segment}
-                                    <span
-                                      class="market-chart__segment"
-                                      style:height={`${(segment.value / languageScaleMax) * 100}%`}
-                                      style:background-color={segment.color}
-                                    ></span>
-                                  {/each}
-                                {:else}
-                                  <span class="market-chart__zero"></span>
-                                {/if}
-                              </Button>
-                            </div>
-                          {/each}
+                                <Button
+                                  type="button"
+                                  unstyled
+                                  class={activeTimelineBucket?.bucket
+                                    .bucket_started_at ===
+                                  chartBucket.bucket.bucket_started_at
+                                    ? "market-chart__hit-target market-chart__hit-target--active"
+                                    : "market-chart__hit-target"}
+                                  title={buildBucketTitle(
+                                    chartBucket,
+                                    "languages",
+                                  )}
+                                  aria-label={buildBucketTitle(
+                                    chartBucket,
+                                    "languages",
+                                  )}
+                                  data-bucket-started-at={chartBucket.bucket
+                                    .bucket_started_at}
+                                  data-total={chartBucket.total}
+                                  onclick={() =>
+                                    (activeBucketStartedAt =
+                                      chartBucket.bucket.bucket_started_at)}
+                                  onmouseenter={() =>
+                                    (activeBucketStartedAt =
+                                      chartBucket.bucket.bucket_started_at)}
+                                  onfocus={() =>
+                                    (activeBucketStartedAt =
+                                      chartBucket.bucket.bucket_started_at)}
+                                ></Button>
+                              </div>
+                            {/each}
+                          </div>
                         </div>
                         {#if !hasLanguageData}
                           <p class="market-chart__panel-note">
-                            No language-attributed coding activity has been recorded for these buckets yet.
+                            No language-attributed coding activity has been
+                            recorded for these buckets yet.
                           </p>
                         {/if}
                       </div>
 
-                      <div class="market-chart__track market-chart__track--churn">
-                        <div
-                          class="market-chart__grid market-chart__grid--bars"
-                          data-track="churn"
-                          data-bucket-count={bucketCount}
-                        >
-                          {#each churnChartBuckets as chartBucket}
-                            <div
-                              class:market-chart__slot--active={activeTimelineBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at}
-                              class="market-chart__slot"
-                            >
-                              <Button
-                                type="button"
-                                unstyled
-                                class={activeTimelineBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at
-                                  ? "market-chart__stack market-chart__stack--active"
-                                  : "market-chart__stack"}
-                                title={buildBucketTitle(chartBucket, "churn")}
-                                aria-label={buildBucketTitle(chartBucket, "churn")}
-                                onclick={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
-                                onmouseenter={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
-                                onfocus={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
+                      <div
+                        class="market-chart__track market-chart__track--churn"
+                      >
+                        <div class="market-chart__plot">
+                          <svg
+                            class="market-chart__svg"
+                            viewBox={`0 0 ${timelineViewBoxWidth} ${CHURN_TRACK_VIEWBOX_HEIGHT}`}
+                            preserveAspectRatio="none"
+                            aria-hidden="true"
+                          >
+                            {#each churnChartRects as rect}
+                              <rect
+                                class="market-chart__rect"
+                                data-bucket-started-at={rect.bucket_started_at}
+                                data-series-key={rect.series_key}
+                                data-value={rect.value}
+                                x={rect.x}
+                                y={rect.y}
+                                width={rect.width}
+                                height={rect.height}
+                                rx="4"
+                                fill={rect.color}
+                              ></rect>
+                            {/each}
+                          </svg>
+                          <div
+                            class="market-chart__grid market-chart__grid--interactive"
+                            data-track="churn"
+                            data-bucket-count={bucketCount}
+                          >
+                            {#each churnChartBuckets as chartBucket}
+                              <div
+                                class:market-chart__slot--active={activeTimelineBucket
+                                  ?.bucket.bucket_started_at ===
+                                  chartBucket.bucket.bucket_started_at}
+                                class="market-chart__slot"
+                                data-bucket-started-at={chartBucket.bucket
+                                  .bucket_started_at}
+                                data-total={chartBucket.total}
                               >
-                                {#if chartBucket.total > 0}
-                                  {#each chartBucket.segments as segment}
-                                    <span
-                                      class="market-chart__segment"
-                                      style:height={`${(segment.value / churnScaleMax) * 100}%`}
-                                      style:background-color={segment.color}
-                                    ></span>
-                                  {/each}
-                                {:else}
-                                  <span class="market-chart__zero"></span>
-                                {/if}
-                              </Button>
-                            </div>
-                          {/each}
+                                <Button
+                                  type="button"
+                                  unstyled
+                                  class={activeTimelineBucket?.bucket
+                                    .bucket_started_at ===
+                                  chartBucket.bucket.bucket_started_at
+                                    ? "market-chart__hit-target market-chart__hit-target--active"
+                                    : "market-chart__hit-target"}
+                                  title={buildBucketTitle(chartBucket, "churn")}
+                                  aria-label={buildBucketTitle(
+                                    chartBucket,
+                                    "churn",
+                                  )}
+                                  data-bucket-started-at={chartBucket.bucket
+                                    .bucket_started_at}
+                                  data-total={chartBucket.total}
+                                  onclick={() =>
+                                    (activeBucketStartedAt =
+                                      chartBucket.bucket.bucket_started_at)}
+                                  onmouseenter={() =>
+                                    (activeBucketStartedAt =
+                                      chartBucket.bucket.bucket_started_at)}
+                                  onfocus={() =>
+                                    (activeBucketStartedAt =
+                                      chartBucket.bucket.bucket_started_at)}
+                                ></Button>
+                              </div>
+                            {/each}
+                          </div>
                         </div>
                         {#if !hasChurnData}
                           <p class="market-chart__panel-note">
-                            No raw heartbeat additions or deletions have been recorded for these buckets yet.
+                            No raw heartbeat additions or deletions have been
+                            recorded for these buckets yet.
                           </p>
                         {/if}
                       </div>
 
-                      <div class="market-chart__track market-chart__track--status">
-                        <div
-                          class="market-chart__grid market-chart__grid--status status-rail"
-                          data-track="status"
-                          data-bucket-count={bucketCount}
-                        >
-                          {#each timelineBuckets as bucket}
-                            <div
-                              class:market-chart__slot--active={activeTimelineBucket?.bucket.bucket_started_at === bucket.bucket_started_at}
-                              class="market-chart__slot"
-                            >
-                              <Button
-                                type="button"
-                                unstyled
-                                class={activeTimelineBucket?.bucket.bucket_started_at === bucket.bucket_started_at
-                                  ? "market-chart__status-button market-chart__status-button--active"
-                                  : "market-chart__status-button"}
-                                title={`${formatDateTime(bucket.bucket_started_at)} · ${humanizeStatus(bucket.status)}\nPresence: ${formatDuration(bucket.presence_seconds)}\nCoding: ${formatDuration(bucket.coding_seconds)}`}
-                                aria-label={`${formatDateTime(bucket.bucket_started_at)} · ${humanizeStatus(bucket.status)}`}
-                                onclick={() => (activeBucketStartedAt = bucket.bucket_started_at)}
-                                onmouseenter={() => (activeBucketStartedAt = bucket.bucket_started_at)}
-                                onfocus={() => (activeBucketStartedAt = bucket.bucket_started_at)}
+                      <div
+                        class="market-chart__track market-chart__track--status"
+                      >
+                        <div class="market-chart__plot">
+                          <svg
+                            class="market-chart__svg"
+                            viewBox={`0 0 ${timelineViewBoxWidth} ${STATUS_TRACK_VIEWBOX_HEIGHT}`}
+                            preserveAspectRatio="none"
+                            aria-hidden="true"
+                          >
+                            {#each statusChartRects as rect}
+                              <rect
+                                class="status-rail__rect"
+                                data-bucket-started-at={rect.bucket_started_at}
+                                data-status={rect.status}
+                                x={rect.x}
+                                y={rect.y}
+                                width={rect.width}
+                                height={rect.height}
+                                rx="9"
+                                fill={rect.color}
+                              ></rect>
+                            {/each}
+                          </svg>
+                          <div
+                            class="market-chart__grid market-chart__grid--interactive market-chart__grid--status"
+                            data-track="status"
+                            data-bucket-count={bucketCount}
+                          >
+                            {#each timelineBuckets as bucket}
+                              <div
+                                class:market-chart__slot--active={activeTimelineBucket
+                                  ?.bucket.bucket_started_at ===
+                                  bucket.bucket_started_at}
+                                class="market-chart__slot"
+                                data-bucket-started-at={bucket.bucket_started_at}
+                                data-presence-seconds={bucket.presence_seconds}
                               >
-                                <span class={statusRailTone(bucket)}></span>
-                              </Button>
-                            </div>
-                          {/each}
+                                <Button
+                                  type="button"
+                                  unstyled
+                                  class={activeTimelineBucket?.bucket
+                                    .bucket_started_at ===
+                                  bucket.bucket_started_at
+                                    ? "market-chart__hit-target market-chart__hit-target--active"
+                                    : "market-chart__hit-target"}
+                                  title={`${formatDateTime(bucket.bucket_started_at)} · ${humanizeStatus(bucket.status)}\nPresence: ${formatDuration(bucket.presence_seconds)}\nCoding: ${formatDuration(bucket.coding_seconds)}`}
+                                  aria-label={`${formatDateTime(bucket.bucket_started_at)} · ${humanizeStatus(bucket.status)}`}
+                                  data-bucket-started-at={bucket.bucket_started_at}
+                                  data-presence-seconds={bucket.presence_seconds}
+                                  onclick={() =>
+                                    (activeBucketStartedAt =
+                                      bucket.bucket_started_at)}
+                                  onmouseenter={() =>
+                                    (activeBucketStartedAt =
+                                      bucket.bucket_started_at)}
+                                  onfocus={() =>
+                                    (activeBucketStartedAt =
+                                      bucket.bucket_started_at)}
+                                ></Button>
+                              </div>
+                            {/each}
+                          </div>
                         </div>
                       </div>
 
-                      <div class="market-chart__x-axis" data-bucket-count={bucketCount}>
+                      <div
+                        class="market-chart__x-axis"
+                        data-bucket-count={bucketCount}
+                      >
                         {#each axisTickLabels as tick}
                           <div class="market-chart__tick-slot">
                             {#if tick.label}
@@ -1161,15 +1550,23 @@
               </h3>
               <div class="mt-4 grid gap-4">
                 <div>
-                  <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">Projects</p>
+                  <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
+                    Projects
+                  </p>
                   <div class="mt-2 grid gap-2">
                     {#if selected_user.current_day.project_mix.length === 0}
                       <p class="m-0 text-sm text-muted">No project mix yet.</p>
                     {:else}
                       {#each selected_user.current_day.project_mix.slice(0, 5) as project}
-                        <div class="flex items-center justify-between gap-3 text-sm">
-                          <span class="text-surface-content">{project.name}</span>
-                          <span class="text-muted">{formatDuration(project.seconds)}</span>
+                        <div
+                          class="flex items-center justify-between gap-3 text-sm"
+                        >
+                          <span class="text-surface-content"
+                            >{project.name}</span
+                          >
+                          <span class="text-muted"
+                            >{formatDuration(project.seconds)}</span
+                          >
                         </div>
                       {/each}
                     {/if}
@@ -1177,15 +1574,23 @@
                 </div>
 
                 <div>
-                  <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">Languages</p>
+                  <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
+                    Languages
+                  </p>
                   <div class="mt-2 grid gap-2">
                     {#if selected_user.current_day.language_mix.length === 0}
                       <p class="m-0 text-sm text-muted">No language mix yet.</p>
                     {:else}
                       {#each selected_user.current_day.language_mix.slice(0, 5) as language}
-                        <div class="flex items-center justify-between gap-3 text-sm">
-                          <span class="text-surface-content">{language.name}</span>
-                          <span class="text-muted">{formatDuration(language.seconds)}</span>
+                        <div
+                          class="flex items-center justify-between gap-3 text-sm"
+                        >
+                          <span class="text-surface-content"
+                            >{language.name}</span
+                          >
+                          <span class="text-muted"
+                            >{formatDuration(language.seconds)}</span
+                          >
                         </div>
                       {/each}
                     {/if}
@@ -1193,15 +1598,22 @@
                 </div>
 
                 <div>
-                  <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">Editors</p>
+                  <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
+                    Editors
+                  </p>
                   <div class="mt-2 grid gap-2">
                     {#if selected_user.current_day.editor_mix.length === 0}
                       <p class="m-0 text-sm text-muted">No editor mix yet.</p>
                     {:else}
                       {#each selected_user.current_day.editor_mix.slice(0, 5) as editor}
-                        <div class="flex items-center justify-between gap-3 text-sm">
-                          <span class="text-surface-content">{editor.name}</span>
-                          <span class="text-muted">{formatDuration(editor.seconds)}</span>
+                        <div
+                          class="flex items-center justify-between gap-3 text-sm"
+                        >
+                          <span class="text-surface-content">{editor.name}</span
+                          >
+                          <span class="text-muted"
+                            >{formatDuration(editor.seconds)}</span
+                          >
                         </div>
                       {/each}
                     {/if}
@@ -1217,34 +1629,50 @@
               <div class="mt-4 grid gap-3 text-sm">
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-muted">Writes</span>
-                  <strong class="text-surface-content">{selected_user.current_day.write_heartbeats_count}</strong>
+                  <strong class="text-surface-content"
+                    >{selected_user.current_day.write_heartbeats_count}</strong
+                  >
                 </div>
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-muted">Files touched</span>
-                  <strong class="text-surface-content">{selected_user.current_day.unique_files_count}</strong>
+                  <strong class="text-surface-content"
+                    >{selected_user.current_day.unique_files_count}</strong
+                  >
                 </div>
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-muted">Commits</span>
-                  <strong class="text-surface-content">{selected_user.current_day.commit_count}</strong>
+                  <strong class="text-surface-content"
+                    >{selected_user.current_day.commit_count}</strong
+                  >
                 </div>
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-muted">Commit additions</span>
-                  <strong class="text-surface-content">{selected_user.current_day.commit_line_additions}</strong>
+                  <strong class="text-surface-content"
+                    >{selected_user.current_day.commit_line_additions}</strong
+                  >
                 </div>
                 <div class="flex items-center justify-between gap-3">
                   <span class="text-muted">Commit deletions</span>
-                  <strong class="text-surface-content">{selected_user.current_day.commit_line_deletions}</strong>
+                  <strong class="text-surface-content"
+                    >{selected_user.current_day.commit_line_deletions}</strong
+                  >
                 </div>
                 <div class="rounded-xl border border-surface-200 bg-dark p-3">
                   <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
                     AI-Assisted Output (Experimental)
                   </p>
                   <div class="mt-2 flex items-center justify-between gap-3">
-                    <span class={aiTone(selected_user.current_day.ai_assisted_output_level)}>
+                    <span
+                      class={aiTone(
+                        selected_user.current_day.ai_assisted_output_level,
+                      )}
+                    >
                       {selected_user.current_day.ai_assisted_output_level}
                     </span>
                     <span class="text-sm text-surface-content">
-                      ratio {selected_user.current_day.ai_assisted_output_ratio.toFixed(1)}
+                      ratio {selected_user.current_day.ai_assisted_output_ratio.toFixed(
+                        1,
+                      )}
                     </span>
                   </div>
                   <p class="mb-0 mt-2 text-xs text-muted">
@@ -1263,33 +1691,63 @@
                   <div class="flex items-center justify-between gap-3">
                     <span class="text-muted">Window</span>
                     <strong class="text-surface-content">
-                      {formatMinuteOfDay(selected_user.schedule.expected_start_minute_local)} - {formatMinuteOfDay(selected_user.schedule.expected_end_minute_local)}
+                      {formatMinuteOfDay(
+                        selected_user.schedule.expected_start_minute_local,
+                      )} - {formatMinuteOfDay(
+                        selected_user.schedule.expected_end_minute_local,
+                      )}
                     </strong>
                   </div>
                   <div class="flex items-center justify-between gap-3">
                     <span class="text-muted">Timezone</span>
-                    <strong class="text-surface-content">{selected_user.schedule.effective_timezone}</strong>
+                    <strong class="text-surface-content"
+                      >{selected_user.schedule.effective_timezone}</strong
+                    >
                   </div>
                   <div class="flex items-center justify-between gap-3">
                     <span class="text-muted">14d on-time</span>
-                    <strong class="text-surface-content">{selected_user.trend_14d.on_time_days}/{selected_user.trend_14d.days_sampled}</strong>
+                    <strong class="text-surface-content"
+                      >{selected_user.trend_14d.on_time_days}/{selected_user
+                        .trend_14d.days_sampled}</strong
+                    >
                   </div>
                   <div class="flex items-center justify-between gap-3">
                     <span class="text-muted">30d on-time</span>
-                    <strong class="text-surface-content">{selected_user.trend_30d.on_time_days}/{selected_user.trend_30d.days_sampled}</strong>
+                    <strong class="text-surface-content"
+                      >{selected_user.trend_30d.on_time_days}/{selected_user
+                        .trend_30d.days_sampled}</strong
+                    >
                   </div>
                   <div class="flex items-center justify-between gap-3">
                     <span class="text-muted">30d average coverage</span>
-                    <strong class="text-surface-content">{formatPercent(selected_user.trend_30d.average_coverage)}</strong>
+                    <strong class="text-surface-content"
+                      >{formatPercent(
+                        selected_user.trend_30d.average_coverage,
+                      )}</strong
+                    >
                   </div>
                 </div>
 
                 {#if can_edit_schedule}
-                  <form method="POST" action={selected_user.schedule.update_path} class="grid gap-3 rounded-xl border border-surface-200 bg-dark p-4">
-                    <input type="hidden" name="authenticity_token" value={csrfToken} />
+                  <form
+                    method="POST"
+                    action={selected_user.schedule.update_path}
+                    class="grid gap-3 rounded-xl border border-surface-200 bg-dark p-4"
+                  >
+                    <input
+                      type="hidden"
+                      name="authenticity_token"
+                      value={csrfToken}
+                    />
                     <input type="hidden" name="_method" value="patch" />
-                    <input type="hidden" name="profile[monitoring_enabled]" value="false" />
-                    <h4 class="m-0 text-sm font-semibold uppercase tracking-[0.22em] text-muted">
+                    <input
+                      type="hidden"
+                      name="profile[monitoring_enabled]"
+                      value="false"
+                    />
+                    <h4
+                      class="m-0 text-sm font-semibold uppercase tracking-[0.22em] text-muted"
+                    >
                       Edit schedule
                     </h4>
                     <label class="grid gap-2 text-sm text-muted">
@@ -1310,7 +1768,9 @@
                           type="time"
                           step="60"
                           name="profile[expected_start_minute_local]"
-                          value={formatMinuteOfDay(selected_user.schedule.expected_start_minute_local)}
+                          value={formatMinuteOfDay(
+                            selected_user.schedule.expected_start_minute_local,
+                          )}
                           placeholder="09:00"
                         />
                       </label>
@@ -1321,7 +1781,9 @@
                           type="time"
                           step="60"
                           name="profile[expected_end_minute_local]"
-                          value={formatMinuteOfDay(selected_user.schedule.expected_end_minute_local)}
+                          value={formatMinuteOfDay(
+                            selected_user.schedule.expected_end_minute_local,
+                          )}
                           placeholder="17:00"
                         />
                       </label>
@@ -1352,7 +1814,11 @@
                     </div>
                     <fieldset class="grid gap-2 border-0 p-0">
                       <legend class="text-sm text-muted">Workdays</legend>
-                      <input type="hidden" name="profile[workdays][]" value="" />
+                      <input
+                        type="hidden"
+                        name="profile[workdays][]"
+                        value=""
+                      />
                       <div class="flex flex-wrap gap-2">
                         {#each dayOptions as option}
                           <label class="workday-chip">
@@ -1360,7 +1826,9 @@
                               type="checkbox"
                               name="profile[workdays][]"
                               value={option.value}
-                              checked={selected_user.schedule.workdays.includes(option.value)}
+                              checked={selected_user.schedule.workdays.includes(
+                                option.value,
+                              )}
                             />
                             <span>{option.label}</span>
                           </label>
@@ -1381,9 +1849,11 @@
                     </Button>
                   </form>
                 {:else}
-                  <div class="rounded-xl border border-surface-200 bg-dark p-4 text-sm text-muted">
-                    This view is read-only for viewers. Admins and superadmins can
-                    edit schedule windows here.
+                  <div
+                    class="rounded-xl border border-surface-200 bg-dark p-4 text-sm text-muted"
+                  >
+                    This view is read-only for viewers. Admins and superadmins
+                    can edit schedule windows here.
                   </div>
                 {/if}
               </div>
@@ -1392,23 +1862,43 @@
 
           <div class="grid gap-4 lg:grid-cols-2">
             <div class="rounded-2xl border border-surface-200 bg-surface p-4">
-              <h3 class="m-0 text-lg font-semibold text-surface-content">Session spans</h3>
+              <h3 class="m-0 text-lg font-semibold text-surface-content">
+                Session spans
+              </h3>
               <div class="mt-4 grid gap-3">
                 {#if selected_user.current_day.session_spans.length === 0}
-                  <p class="m-0 text-sm text-muted">No recorded sessions for this day yet.</p>
+                  <p class="m-0 text-sm text-muted">
+                    No recorded sessions for this day yet.
+                  </p>
                 {:else}
                   {#each selected_user.current_day.session_spans as session}
-                    <div class="rounded-xl border border-surface-200 bg-dark p-3">
-                      <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div
+                      class="rounded-xl border border-surface-200 bg-dark p-3"
+                    >
+                      <div
+                        class="flex flex-wrap items-center justify-between gap-3"
+                      >
                         <strong class="text-surface-content">
-                          {formatDateTime(session.start_at)} - {formatDateTime(session.end_at)}
+                          {formatDateTime(session.start_at)} - {formatDateTime(
+                            session.end_at,
+                          )}
                         </strong>
-                        <span class="text-sm text-muted">{formatDuration(session.duration_seconds)}</span>
+                        <span class="text-sm text-muted"
+                          >{formatDuration(session.duration_seconds)}</span
+                        >
                       </div>
                       <div class="mt-2 grid gap-1 text-xs text-muted">
-                        <span>Projects: {session.projects.join(", ") || "None"}</span>
-                        <span>Languages: {session.languages.join(", ") || "None"}</span>
-                        <span>Editors: {session.editors.join(", ") || "None"}</span>
+                        <span
+                          >Projects: {session.projects.join(", ") ||
+                            "None"}</span
+                        >
+                        <span
+                          >Languages: {session.languages.join(", ") ||
+                            "None"}</span
+                        >
+                        <span
+                          >Editors: {session.editors.join(", ") || "None"}</span
+                        >
                       </div>
                     </div>
                   {/each}
@@ -1417,9 +1907,13 @@
             </div>
 
             <div class="rounded-2xl border border-surface-200 bg-surface p-4">
-              <h3 class="m-0 text-lg font-semibold text-surface-content">Recent attendance history</h3>
+              <h3 class="m-0 text-lg font-semibold text-surface-content">
+                Recent attendance history
+              </h3>
               <div class="mt-4 overflow-x-auto">
-                <table class="min-w-full monitoring-table monitoring-table--compact">
+                <table
+                  class="min-w-full monitoring-table monitoring-table--compact"
+                >
                   <thead>
                     <tr>
                       <th>Date</th>
@@ -1450,8 +1944,11 @@
           </div>
         </div>
       {:else}
-        <div class="rounded-2xl border border-surface-200 bg-surface p-8 text-center text-muted">
-          Select a developer from the roster to inspect timeline, schedule, and output detail.
+        <div
+          class="rounded-2xl border border-surface-200 bg-surface p-8 text-center text-muted"
+        >
+          Select a developer from the roster to inspect timeline, schedule, and
+          output detail.
         </div>
       {/if}
     </section>
@@ -1723,28 +2220,23 @@
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
 
-  .chart-legend__swatch--active,
-  .status-rail__segment--active {
+  .chart-legend__swatch--active {
     background: rgba(99, 255, 180, 0.32);
   }
 
-  .chart-legend__swatch--idle,
-  .status-rail__segment--idle {
+  .chart-legend__swatch--idle {
     background: rgba(255, 215, 107, 0.32);
   }
 
-  .chart-legend__swatch--inactive,
-  .status-rail__segment--inactive {
+  .chart-legend__swatch--inactive {
     background: rgba(255, 107, 107, 0.28);
   }
 
-  .chart-legend__swatch--before,
-  .status-rail__segment--before {
+  .chart-legend__swatch--before {
     background: rgba(160, 174, 192, 0.24);
   }
 
-  .chart-legend__swatch--after,
-  .status-rail__segment--after {
+  .chart-legend__swatch--after {
     background: rgba(111, 179, 255, 0.28);
   }
 
@@ -1761,8 +2253,16 @@
     border: 1px solid var(--color-surface-200);
     border-radius: 1.1rem;
     background:
-      radial-gradient(circle at top left, rgba(255, 191, 72, 0.08), transparent 34%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+      radial-gradient(
+        circle at top left,
+        rgba(255, 191, 72, 0.08),
+        transparent 34%
+      ),
+      linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.03),
+        rgba(255, 255, 255, 0.01)
+      ),
       var(--color-dark);
     padding: 1rem;
   }
@@ -1839,9 +2339,12 @@
 
   .market-chart__track {
     position: relative;
+    display: flex;
+    flex-direction: column;
     border: 1px solid var(--color-surface-200);
     border-radius: 1rem;
     overflow: hidden;
+    min-height: 0;
     padding: 0.38rem 0.32rem;
   }
 
@@ -1858,25 +2361,55 @@
     background-size: 100% 25%;
   }
 
+  .market-chart__track--languages {
+    height: 16rem;
+  }
+
+  .market-chart__track--churn {
+    height: 8rem;
+  }
+
   .market-chart__track--status {
     background: rgba(255, 255, 255, 0.02);
+    height: 2.5rem;
     padding: 0.32rem;
+  }
+
+  .market-chart__plot {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .market-chart__svg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
   }
 
   .market-chart__grid,
   .market-chart__x-axis {
     display: grid;
-    grid-template-columns: repeat(var(--bucket-count), minmax(var(--bucket-width), var(--bucket-width)));
+    grid-template-columns: repeat(
+      var(--bucket-count),
+      minmax(var(--bucket-width), var(--bucket-width))
+    );
     gap: var(--bucket-gap);
     min-width: max-content;
   }
 
   .market-chart__grid {
     height: 100%;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
   }
 
-  .market-chart__grid--bars {
-    align-items: end;
+  .market-chart__grid--interactive {
+    position: relative;
+    align-items: stretch;
   }
 
   .market-chart__grid--status {
@@ -1886,6 +2419,7 @@
   .market-chart__slot {
     position: relative;
     min-width: 0;
+    height: 100%;
   }
 
   .market-chart__slot--active::after {
@@ -1898,68 +2432,32 @@
     pointer-events: none;
   }
 
-  .market-chart__stack,
-  .market-chart__status-button {
-    width: 100%;
-    height: 100%;
+  .market-chart__hit-target {
+    position: absolute;
+    inset: 0;
+    border-radius: 0.75rem;
+    cursor: pointer;
     padding: 0;
     border: 0;
     background: transparent;
-  }
-
-  .market-chart__stack {
-    border-radius: 0.75rem;
-    display: flex;
-    flex-direction: column-reverse;
-    gap: 1px;
-    align-items: stretch;
-    cursor: pointer;
+    appearance: none;
     transition:
       transform 120ms ease,
       box-shadow 120ms ease,
       background 120ms ease;
   }
 
-  .market-chart__stack:focus-visible,
-  .market-chart__stack--active,
-  .market-chart__status-button:focus-visible,
-  .market-chart__status-button--active {
+  .market-chart__hit-target:focus-visible,
+  .market-chart__hit-target--active {
     transform: translateY(-2px);
     box-shadow: 0 0 0 1px rgba(255, 191, 72, 0.35);
     background: rgba(255, 191, 72, 0.06);
     outline: none;
   }
 
-  .market-chart__segment {
-    width: 100%;
-    border-radius: 0.4rem;
-    min-height: 0.16rem;
-  }
-
-  .market-chart__zero {
-    width: 100%;
-    height: 2px;
-    margin-top: auto;
-    border-radius: 999px;
-    background: rgba(160, 174, 192, 0.4);
-  }
-
-  .market-chart__status-button {
-    border-radius: 0.7rem;
-  }
-
-  .status-rail {
-    display: grid;
-    gap: var(--bucket-gap);
-  }
-
-  .status-rail__segment {
-    display: block;
-    width: 100%;
-    height: 100%;
-    min-height: 1.55rem;
-    border-radius: 999px;
-    border: 1px solid transparent;
+  .market-chart__rect {
+    shape-rendering: geometricPrecision;
+    vector-effect: non-scaling-stroke;
   }
 
   .market-chart__panel-note {
@@ -2058,12 +2556,20 @@
       --bucket-gap: 0.22rem;
     }
 
-    .activity-chart__focus-card {
-      width: 100%;
+    .market-chart__track--languages {
+      height: 13rem;
     }
 
-    .status-rail__segment {
-      min-height: 1.2rem;
+    .market-chart__track--churn {
+      height: 6.5rem;
+    }
+
+    .market-chart__track--status {
+      height: 2.3rem;
+    }
+
+    .activity-chart__focus-card {
+      width: 100%;
     }
 
     .market-chart__panel-note {

@@ -2,72 +2,101 @@ require "application_system_test_case"
 
 class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
   test "viewer access stays read only" do
-    viewer = User.create!(timezone: "UTC", admin_level: "viewer", github_username: "viewer-monitoring")
-    monitored = create_monitored_user("readonly-dev")
+    travel_to monitoring_reference_time do
+      viewer = User.create!(timezone: "UTC", admin_level: "viewer", github_username: "viewer-monitoring")
+      monitored = create_monitored_user("readonly-dev")
 
-    sign_in_as(viewer)
-    visit admin_employee_monitoring_path(user_id: monitored.id)
+      sign_in_as(viewer)
+      visit admin_employee_monitoring_path(user_id: monitored.id)
 
-    assert_text "Employee Monitoring"
-    assert_text monitored.display_name
-    assert_text "This view is read-only for viewers."
-    assert_no_button "Save schedule"
+      assert_text "Employee Monitoring"
+      assert_text monitored.display_name
+      assert_text "This view is read-only for viewers."
+      assert_no_button "Save schedule"
+    end
   end
 
   test "admins can access the schedule editor" do
-    admin = User.create!(timezone: "UTC", admin_level: "admin", github_username: "admin-monitoring")
-    monitored = create_monitored_user("editable-dev")
+    travel_to monitoring_reference_time do
+      admin = User.create!(timezone: "UTC", admin_level: "admin", github_username: "admin-monitoring")
+      monitored = create_monitored_user("editable-dev")
 
-    sign_in_as(admin)
-    visit admin_employee_monitoring_path(user_id: monitored.id)
+      sign_in_as(admin)
+      visit admin_employee_monitoring_path(user_id: monitored.id)
 
-    assert_text monitored.display_name
-    assert_text "EDIT SCHEDULE"
-    assert_field "Timezone override", with: ""
-    assert_field "Expected start", with: "09:00"
-    assert_field "Expected finish", with: "17:00"
-    assert_button "Save schedule"
+      assert_text monitored.display_name
+      assert_text "EDIT SCHEDULE"
+      assert_field "Timezone override", with: ""
+      assert_field "Expected start", with: "09:00"
+      assert_field "Expected finish", with: "17:00"
+      assert_button "Save schedule"
+    end
   end
 
-  test "activity chart and commit counts render when activity exists" do
-    admin = User.create!(timezone: "UTC", admin_level: "admin", github_username: "admin-monitoring-2")
-    monitored = create_monitored_user("active-dev")
-    create_commit(monitored, at: 1.minute.ago)
+  test "activity chart renders today's bucket data and aligned panels" do
+    travel_to monitoring_reference_time do
+      admin = User.create!(timezone: "UTC", admin_level: "admin", github_username: "admin-monitoring-2")
+      monitored = create_monitored_user("active-dev")
+      create_commit(monitored, at: 1.minute.ago)
 
-    sign_in_as(admin)
-    visit admin_employee_monitoring_path(user_id: monitored.id)
+      sign_in_as(admin)
+      visit admin_employee_monitoring_path(user_id: monitored.id)
 
-    within(:xpath, "//h3[contains(., '5-minute activity chart')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
-      assert_text "Coding time by language per 5-minute bucket"
-      assert_text "Line churn by 5-minute bucket"
-      assert_text "PRESENCE STATUS"
-      assert_no_selector ".activity-chart__controls"
+      within(:xpath, "//h3[contains(., '5-minute activity chart')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
+        assert_text "Coding time by language per 5-minute bucket"
+        assert_text "Line churn by 5-minute bucket"
+        assert_text "PRESENCE STATUS"
+        assert_no_selector ".activity-chart__controls"
+        assert_text "+20 adds"
+        assert_text "-5 deletes"
+        assert_text "Go: 1m"
+        assert_text "Ruby: 1m"
 
-      shared_axis = find(".market-chart__x-axis")
-      shared_bucket_count = shared_axis["data-bucket-count"].to_i
+        shared_axis = find(".market-chart__x-axis")
+        shared_bucket_count = shared_axis["data-bucket-count"].to_i
 
-      assert_equal shared_bucket_count, all(".market-chart__tick-slot").count
-      assert_equal shared_bucket_count, find("[data-track='languages']")["data-bucket-count"].to_i
-      assert_equal shared_bucket_count, find("[data-track='churn']")["data-bucket-count"].to_i
-      assert_equal shared_bucket_count, find("[data-track='status']")["data-bucket-count"].to_i
-      assert_equal shared_bucket_count, all("[data-track='status'] .status-rail__segment").count
-    end
+        assert_equal shared_bucket_count, all(".market-chart__tick-slot").count
+        assert_equal shared_bucket_count, find("[data-track='languages']")["data-bucket-count"].to_i
+        assert_equal shared_bucket_count, find("[data-track='churn']")["data-bucket-count"].to_i
+        assert_equal shared_bucket_count, find("[data-track='status']")["data-bucket-count"].to_i
+        assert_equal shared_bucket_count, all("[data-track='status'] .market-chart__slot").count
+        assert_operator dom_count(".market-chart__track--languages .market-chart__rect"), :>=, 2
+        assert_operator dom_count(".market-chart__track--churn .market-chart__rect"), :>=, 2
+        assert_operator dom_count(".market-chart__track--status .status-rail__rect"), :>=, 1
 
-    within(:xpath, "//h3[contains(., 'Delivery detail')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
-      commits_row = find("span", text: "Commits").find(:xpath, "..")
-      assert_equal "1", commits_row.find("strong").text
+        assert_equal 1, all(".market-chart__track--languages .market-chart__slot--active").count
+        assert_equal 1, all(".market-chart__track--churn .market-chart__slot--active").count
+        assert_equal 1, all(".market-chart__track--status .market-chart__slot--active").count
+
+        bucket_started_at = monitoring_reference_time.change(min: 30, sec: 0).iso8601
+        assert_equal [ "Go", "Ruby" ], bucket_series_keys(".market-chart__track--languages", bucket_started_at)
+        assert_equal [ "line_additions", "line_deletions" ], bucket_series_keys(".market-chart__track--churn", bucket_started_at)
+        assert_operator bucket_rect_heights(".market-chart__track--languages", bucket_started_at).max, :>, 20
+        assert_operator bucket_rect_heights(".market-chart__track--churn", bucket_started_at).max, :>, 10
+      end
+
+      within(:xpath, "//h3[contains(., 'Delivery detail')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
+        commits_row = find("span", text: "Commits").find(:xpath, "..")
+        assert_equal "1", commits_row.find("strong").text
+      end
     end
   end
 
   private
 
+  def monitoring_reference_time
+    Time.utc(2026, 4, 13, 14, 33, 0)
+  end
+
   def create_monitored_user(github_username)
     user = User.create!(timezone: "UTC", github_username: github_username)
     user.create_employee_monitoring_profile!
 
+    bucket_started_at = monitoring_reference_time.change(min: 30, sec: 0)
+
     Heartbeat.create!(
       user: user,
-      time: 4.minutes.ago.to_i,
+      time: (bucket_started_at + 30.seconds).to_i,
       category: "coding",
       project: "internal_ui",
       language: "Ruby",
@@ -75,22 +104,44 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
       entity: "/app/internal_ui/app/page.tsx",
       is_write: true,
       line_additions: 12,
+      line_deletions: 3,
       source_type: :test_entry
     )
     Heartbeat.create!(
       user: user,
-      time: 2.minutes.ago.to_i,
+      time: (bucket_started_at + 2.minutes).to_i,
       category: "coding",
       project: "internal_ui",
-      language: "Ruby",
+      language: "Go",
       editor: "VS Code",
       entity: "/app/internal_ui/app/page.tsx",
       is_write: true,
       line_additions: 8,
+      line_deletions: 2,
       source_type: :test_entry
     )
 
     user
+  end
+
+  def bucket_series_keys(track_selector, bucket_started_at)
+    page.evaluate_script(<<~JS)
+      Array.from(
+        document.querySelectorAll("#{track_selector} [data-bucket-started-at='#{bucket_started_at}'][data-series-key]")
+      ).map((element) => element.getAttribute("data-series-key")).sort()
+    JS
+  end
+
+  def bucket_rect_heights(track_selector, bucket_started_at)
+    page.evaluate_script(<<~JS)
+      Array.from(
+        document.querySelectorAll("#{track_selector} [data-bucket-started-at='#{bucket_started_at}'][data-series-key]")
+      ).map((element) => Number(element.getAttribute("height")))
+    JS
+  end
+
+  def dom_count(selector)
+    page.evaluate_script("document.querySelectorAll(#{selector.to_json}).length")
   end
 
   def create_commit(user, at:)

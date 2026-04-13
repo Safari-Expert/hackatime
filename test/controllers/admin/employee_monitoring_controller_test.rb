@@ -8,52 +8,98 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
     @regular_user = User.create!(timezone: "UTC", github_username: "regular-user")
     @monitored = User.create!(timezone: "UTC", github_username: "#{@search_term}-monitored")
     @monitored.create_employee_monitoring_profile!
+    bucket_started_at = monitoring_reference_time.change(min: 30, sec: 0)
     Heartbeat.create!(
       user: @monitored,
-      time: 5.minutes.ago.to_i,
+      time: (bucket_started_at + 30.seconds).to_i,
       category: "coding",
       project: "internal_ui",
       language: "Ruby",
       editor: "VS Code",
       entity: "/app/internal_ui/app/page.tsx",
       is_write: true,
+      line_additions: 12,
+      line_deletions: 3,
+      source_type: :test_entry
+    )
+    Heartbeat.create!(
+      user: @monitored,
+      time: (bucket_started_at + 2.minutes).to_i,
+      category: "coding",
+      project: "internal_ui",
+      language: "Go",
+      editor: "VS Code",
+      entity: "/app/internal_ui/app/page.tsx",
+      is_write: true,
+      line_additions: 8,
+      line_deletions: 2,
       source_type: :test_entry
     )
     sign_in_as(@viewer)
   end
 
   test "renders the employee monitoring page for viewers" do
-    get employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+    travel_to monitoring_reference_time do
+      get employee_monitoring_path(user_id: @monitored.id, search: @search_term)
 
-    assert_response :success
-    assert_inertia_component "SafariExpert/EmployeeMonitoring/Index"
-    assert_equal "Employee Monitoring", inertia_page.dig("props", "page_title")
-    assert_equal false, inertia_page.dig("props", "can_edit_schedule")
-    assert_equal @monitored.id, inertia_page.dig("props", "selected_user", "id")
-    assert_equal 1, inertia_page.dig("props", "overview", "summary", "monitored_users")
-    assert_equal 1, inertia_page.dig("props", "overview", "roster").length
-    assert_not_nil inertia_page.dig("props", "selected_user", "current_day", "write_heartbeats_count")
-    assert_not_nil inertia_page.dig("props", "selected_user", "current_day", "timeline_buckets", 0, "line_additions")
-    assert_not_nil inertia_page.dig("props", "selected_user", "current_day", "timeline_buckets", 0, "language_breakdown")
-    assert_not_nil inertia_page.dig("props", "selected_user", "schedule", "label")
+      assert_response :success
+      assert_inertia_component "SafariExpert/EmployeeMonitoring/Index"
+      assert_equal "Employee Monitoring", inertia_page.dig("props", "page_title")
+      assert_equal false, inertia_page.dig("props", "can_edit_schedule")
+      assert_equal @monitored.id, inertia_page.dig("props", "selected_user", "id")
+      assert_equal 1, inertia_page.dig("props", "overview", "summary", "monitored_users")
+      assert_equal 1, inertia_page.dig("props", "overview", "roster").length
+      assert_not_nil inertia_page.dig("props", "selected_user", "current_day", "write_heartbeats_count")
+      assert_not_nil inertia_page.dig("props", "selected_user", "schedule", "label")
+
+      current_bucket = inertia_page.dig("props", "selected_user", "current_day", "timeline_buckets")
+                                  .find { |bucket| bucket["bucket_started_at"] == "2026-04-13T14:30:00Z" }
+
+      assert_not_nil current_bucket
+      assert_equal 20, current_bucket["line_additions"]
+      assert_equal 5, current_bucket["line_deletions"]
+      assert_equal 150, current_bucket["coding_seconds"]
+      assert_equal [ "Ruby", "Go" ], current_bucket["languages"]
+      assert_equal(
+        [
+          {
+            "language" => "Ruby",
+            "coding_seconds" => 90,
+            "line_additions" => 12,
+            "line_deletions" => 3
+          },
+          {
+            "language" => "Go",
+            "coding_seconds" => 60,
+            "line_additions" => 8,
+            "line_deletions" => 2
+          }
+        ],
+        current_bucket["language_breakdown"]
+      )
+    end
   end
 
   test "renders the employee monitoring page read-only for regular users" do
-    sign_in_as(@regular_user)
+    travel_to monitoring_reference_time do
+      sign_in_as(@regular_user)
 
-    get employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+      get employee_monitoring_path(user_id: @monitored.id, search: @search_term)
 
-    assert_response :success
-    assert_inertia_component "SafariExpert/EmployeeMonitoring/Index"
-    assert_equal false, inertia_page.dig("props", "can_edit_schedule")
-    assert_equal @monitored.id, inertia_page.dig("props", "selected_user", "id")
+      assert_response :success
+      assert_inertia_component "SafariExpert/EmployeeMonitoring/Index"
+      assert_equal false, inertia_page.dig("props", "can_edit_schedule")
+      assert_equal @monitored.id, inertia_page.dig("props", "selected_user", "id")
+    end
   end
 
   test "legacy admin path redirects to the canonical employee monitoring path" do
-    get admin_employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+    travel_to monitoring_reference_time do
+      get admin_employee_monitoring_path(user_id: @monitored.id, search: @search_term)
 
-    assert_response :redirect
-    assert_redirected_to employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+      assert_response :redirect
+      assert_redirected_to employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+    end
   end
 
   test "prevents viewers from updating schedules" do
@@ -102,5 +148,11 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
     assert_equal 5, profile.start_grace_minutes
     assert_equal 10, profile.end_grace_minutes
     assert_equal [ 1, 2, 3, 4, 5 ], profile.normalized_workdays
+  end
+
+  private
+
+  def monitoring_reference_time
+    Time.utc(2026, 4, 13, 14, 33, 0)
   end
 end
