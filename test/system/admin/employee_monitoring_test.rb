@@ -27,9 +27,36 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
       assert_text monitored.display_name
       assert_text "EDIT SCHEDULE"
       assert_field "Timezone override", with: ""
-      assert_field "Expected start", with: "09:00"
-      assert_field "Expected finish", with: "17:00"
+      assert_selector "input[type='time']", minimum: 10
       assert_button "Save schedule"
+    end
+  end
+
+  test "admins see the simplified attendance panel for external users" do
+    travel_to monitoring_reference_time do
+      admin = User.create!(timezone: "UTC", admin_level: "admin", github_username: "admin-ext")
+      external_user = User.create!(
+        timezone: "UTC",
+        account_kind: :external,
+        display_name_override: "External Worker",
+        username: "ext-work-sys",
+        password: "supersecure123"
+      )
+      external_user.create_employee_monitoring_profile!
+      external_user.external_work_sessions.create!(
+        started_at: Time.utc(2026, 4, 13, 9, 0, 0),
+        ended_at: Time.utc(2026, 4, 13, 12, 0, 0),
+        close_reason: :user_clock_out
+      )
+
+      sign_in_as(admin)
+      visit admin_employee_monitoring_path(user_id: external_user.id)
+
+      assert_text "SELECTED EXTERNAL COLLABORATOR"
+      assert_text "Current week"
+      assert_text "External Worker"
+      assert_text "EXTERNAL"
+      assert_no_text "5-minute activity chart"
     end
   end
 

@@ -6,10 +6,16 @@ class Admin::EmployeeMonitoringController < InertiaController
   before_action :authenticate_user!
   before_action :set_target_user, only: :update_profile
   before_action :require_schedule_editor!, only: :update_profile
+  before_action :require_external_user!, only: [ :clock_in, :clock_out ]
 
   def show
     if request.path.start_with?("/admin/employee_monitoring")
       redirect_to employee_monitoring_path(request.query_parameters)
+      return
+    end
+
+    if current_user.account_kind_external?
+      render_external_dashboard
       return
     end
 
@@ -31,6 +37,20 @@ class Admin::EmployeeMonitoringController < InertiaController
     }
   end
 
+  def clock_in
+    SafariExpert::EmployeeMonitoring::ExternalAttendanceManager.new(user: current_user, now: Time.current).clock_in!
+    redirect_to employee_monitoring_path, notice: "Clocked in."
+  rescue SafariExpert::EmployeeMonitoring::ExternalAttendanceManager::Error => e
+    redirect_to employee_monitoring_path, alert: e.message
+  end
+
+  def clock_out
+    SafariExpert::EmployeeMonitoring::ExternalAttendanceManager.new(user: current_user, now: Time.current).clock_out!
+    redirect_to employee_monitoring_path, notice: "Clocked out."
+  rescue SafariExpert::EmployeeMonitoring::ExternalAttendanceManager::Error => e
+    redirect_to employee_monitoring_path, alert: e.message
+  end
+
   def update_profile
     SafariExpert::EmployeeMonitoring::ProfileUpdater.new(user: @target_user, params: profile_params).call
     redirect_to employee_monitoring_path(user_id: @target_user.id), notice: "Monitoring schedule updated."
@@ -49,11 +69,27 @@ class Admin::EmployeeMonitoringController < InertiaController
   end
 
   def decorate_selected_user(user)
-    payload = SafariExpert::EmployeeMonitoring::UserDetailQuery.new(user: user, now: Time.current).call
+    payload =
+      if user.account_kind_external?
+        SafariExpert::EmployeeMonitoring::ExternalAttendanceQuery.new(user: user, now: Time.current).call
+      else
+        SafariExpert::EmployeeMonitoring::UserDetailQuery.new(user: user, now: Time.current).call
+      end
     payload[:schedule] = payload[:schedule].merge(
       update_path: admin_employee_monitoring_user_profile_path(id: user.id)
     )
     payload
+  end
+
+  def render_external_dashboard
+    render inertia: "SafariExpert/EmployeeMonitoring/ExternalDashboard", props: {
+      page_title: "Employee Monitoring",
+      user: decorate_selected_user(current_user),
+      can_clock: true,
+      can_edit_schedule: false,
+      clock_in_path: employee_monitoring_clock_in_path,
+      clock_out_path: employee_monitoring_clock_out_path
+    }
   end
 
   def set_target_user
@@ -68,6 +104,10 @@ class Admin::EmployeeMonitoringController < InertiaController
     current_user&.admin_level.in?(%w[admin superadmin])
   end
 
+  def require_external_user!
+    redirect_to employee_monitoring_path, alert: "Only external collaborators can use the clock." unless current_user.account_kind_external?
+  end
+
   def profile_params
     params.require(:profile).permit(
       :monitoring_enabled,
@@ -76,7 +116,8 @@ class Admin::EmployeeMonitoringController < InertiaController
       :expected_end_minute_local,
       :start_grace_minutes,
       :end_grace_minutes,
-      workdays: []
+      workdays: [],
+      schedule_days: [ :weekday, :enabled, :expected_start_minute_local, :expected_end_minute_local ]
     )
   end
 end

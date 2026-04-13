@@ -59,4 +59,24 @@ class UserTest < ActiveSupport::TestCase
 
     assert user.active_remote_heartbeat_import_run?
   end
+
+  test "external accounts require username and password and use display name override" do
+    user = User.new(
+      timezone: "UTC",
+      account_kind: :external,
+      display_name_override: "Pat Contractor"
+    )
+
+    assert_not user.valid?
+    assert_includes user.errors[:username], "can't be blank"
+    assert_includes user.errors[:password], "can't be blank"
+
+    user.username = "pat-contractor"
+    user.password = "supersecure123"
+
+    assert user.valid?
+    assert_equal "Pat Contractor", user.display_name
+    assert user.authenticate("supersecure123")
+    assert_not user.authenticate("wrong-password")
+  end
 end

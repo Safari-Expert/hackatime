@@ -18,6 +18,7 @@ module SafariExpert
 
         {
           id: @user.id,
+          account_kind: @user.account_kind,
           display_name: @user.display_name,
           username: @user.username.presence || @user.github_username.presence,
           avatar_url: @user.avatar_url,
@@ -28,6 +29,7 @@ module SafariExpert
             expected_start_minute_local: profile.expected_start_minute_local,
             expected_end_minute_local: profile.expected_end_minute_local,
             workdays: profile.normalized_workdays,
+            schedule_days: profile.schedule_editor_payload,
             start_grace_minutes: profile.start_grace_minutes,
             end_grace_minutes: profile.end_grace_minutes,
             label: profile.schedule_label(user: @user)

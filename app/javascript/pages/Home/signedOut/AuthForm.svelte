@@ -5,6 +5,7 @@
     hca_auth_path,
     slack_auth_path,
     email_auth_path,
+    external_auth_path,
     sign_in_email,
     show_dev_tool,
     dev_magic_link,
@@ -16,6 +17,7 @@
     hca_auth_path: string;
     slack_auth_path: string;
     email_auth_path: string;
+    external_auth_path: string;
     sign_in_email: boolean;
     show_dev_tool: boolean;
     dev_magic_link?: string | null;
@@ -131,4 +133,48 @@
       </div>
     </form>
   {/if}
+
+  <div class="rounded-2xl border border-surface-200 bg-surface p-5 space-y-3">
+    <div>
+      <p class="text-surface-content font-medium">External collaborator</p>
+      <p class="text-secondary text-sm">
+        Use the username and password issued by your administrator.
+      </p>
+    </div>
+
+    <form
+      method="post"
+      action={external_auth_path}
+      data-turbo="false"
+      class="space-y-3"
+    >
+      <input type="hidden" name="authenticity_token" value={csrf_token} />
+      {#if continue_param}
+        <input type="hidden" name="continue" value={continue_param} />
+      {/if}
+
+      <input
+        type="text"
+        name="username"
+        placeholder="Username"
+        required
+        class="w-full bg-dark text-surface-content placeholder-muted rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all border border-surface-200 focus:border-primary text-sm"
+      />
+      <input
+        type="password"
+        name="password"
+        placeholder="Password"
+        required
+        class="w-full bg-dark text-surface-content placeholder-muted rounded-xl py-3 px-4 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all border border-surface-200 focus:border-primary text-sm"
+      />
+
+      <Button
+        type="submit"
+        variant="primary"
+        class="w-full justify-center rounded-xl"
+      >
+        Sign in with username
+      </Button>
+    </form>
+  </div>
 </div>

@@ -188,11 +188,40 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
     patch admin_employee_monitoring_user_profile_path(id: @monitored.id), params: {
       profile: {
         timezone_override: "Africa/Nairobi",
-        expected_start_minute_local: "08:30",
-        expected_end_minute_local: "17:30",
         start_grace_minutes: 5,
         end_grace_minutes: 10,
-        workdays: [ 1, 2, 3, 4, 5 ]
+        schedule_days: {
+          "0" => {
+            weekday: 1,
+            enabled: "true",
+            expected_start_minute_local: "08:30",
+            expected_end_minute_local: "17:30"
+          },
+          "1" => {
+            weekday: 2,
+            enabled: "true",
+            expected_start_minute_local: "08:30",
+            expected_end_minute_local: "17:30"
+          },
+          "2" => {
+            weekday: 3,
+            enabled: "true",
+            expected_start_minute_local: "08:30",
+            expected_end_minute_local: "17:30"
+          },
+          "3" => {
+            weekday: 4,
+            enabled: "true",
+            expected_start_minute_local: "08:30",
+            expected_end_minute_local: "17:30"
+          },
+          "4" => {
+            weekday: 5,
+            enabled: "true",
+            expected_start_minute_local: "08:30",
+            expected_end_minute_local: "17:30"
+          }
+        }
       }
     }
 
@@ -204,6 +233,70 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
     assert_equal 5, profile.start_grace_minutes
     assert_equal 10, profile.end_grace_minutes
     assert_equal [ 1, 2, 3, 4, 5 ], profile.normalized_workdays
+    assert_equal [ 1, 2, 3, 4, 5 ], @monitored.employee_monitoring_schedule_days.ordered.pluck(:weekday)
+    assert_equal [ 510 ], @monitored.employee_monitoring_schedule_days.distinct.pluck(:expected_start_minute_local)
+    assert_equal [ 1050 ], @monitored.employee_monitoring_schedule_days.distinct.pluck(:expected_end_minute_local)
+  end
+
+  test "renders the simplified detail payload for external users" do
+    external_user = User.create!(
+      timezone: "UTC",
+      account_kind: :external,
+      display_name_override: "External Worker",
+      username: "external-worker",
+      password: "supersecure123"
+    )
+    external_user.create_employee_monitoring_profile!
+    external_user.external_work_sessions.create!(
+      started_at: Time.utc(2026, 4, 13, 9, 0, 0),
+      ended_at: Time.utc(2026, 4, 13, 12, 0, 0),
+      close_reason: :user_clock_out
+    )
+
+    travel_to monitoring_reference_time do
+      sign_in_as(@admin)
+
+      get employee_monitoring_path(user_id: external_user.id)
+
+      assert_response :success
+      assert_equal "external", inertia_page.dig("props", "selected_user", "account_kind")
+      assert_equal "clocked_out", inertia_page.dig("props", "selected_user", "attendance", "state")
+      assert_equal 3.hours.to_i, inertia_page.dig("props", "selected_user", "attendance", "today_seconds")
+      assert_equal true, inertia_page.dig("props", "overview", "roster").any? { |row| row["id"] == external_user.id && row["account_kind"] == "external" }
+      assert_equal 7, inertia_page.dig("props", "selected_user", "schedule", "schedule_days").length
+    end
+  end
+
+  test "external users get a self-only dashboard and can clock in and out" do
+    external_user = User.create!(
+      timezone: "UTC",
+      account_kind: :external,
+      display_name_override: "External Worker",
+      username: "external-self",
+      password: "supersecure123"
+    )
+    external_user.create_employee_monitoring_profile!
+    sign_in_as(external_user)
+
+    get employee_monitoring_path(user_id: @monitored.id)
+
+    assert_response :success
+    assert_inertia_component "SafariExpert/EmployeeMonitoring/ExternalDashboard"
+    assert_equal external_user.id, inertia_page.dig("props", "user", "id")
+
+    travel_to Time.utc(2026, 4, 13, 9, 0, 0) do
+      post employee_monitoring_clock_in_path
+    end
+
+    assert_redirected_to employee_monitoring_path
+    assert external_user.external_work_sessions.open.exists?
+
+    travel_to Time.utc(2026, 4, 13, 17, 0, 0) do
+      post employee_monitoring_clock_out_path
+    end
+
+    assert_redirected_to employee_monitoring_path
+    assert_not external_user.external_work_sessions.open.exists?
   end
 
   private

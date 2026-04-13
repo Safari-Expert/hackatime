@@ -11,7 +11,13 @@ module SafariExpert
 
       def call
         users = UserScope.new(search: @search).relation.to_a
-        roster = users.map { |user| RollupBuilder.new(user: user, now: @now).call }
+        roster = users.map do |user|
+          if user.account_kind_external?
+            ExternalAttendanceQuery.new(user: user, now: @now).roster_row
+          else
+            RollupBuilder.new(user: user, now: @now).call
+          end
+        end
         filtered_roster = filter_roster(roster)
 
         {

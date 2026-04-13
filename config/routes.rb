@@ -30,6 +30,8 @@ Rails.application.routes.draw do
   post "/oauth/applications/:id/rotate_secret", to: "doorkeeper/applications#rotate_secret", as: :rotate_secret_oauth_application
   root "static_pages#index"
   get "employee_monitoring", to: "admin/employee_monitoring#show", as: :employee_monitoring
+  post "employee_monitoring/clock_in", to: "admin/employee_monitoring#clock_in", as: :employee_monitoring_clock_in
+  post "employee_monitoring/clock_out", to: "admin/employee_monitoring#clock_out", as: :employee_monitoring_clock_out
 
   resources :extensions, only: [ :index ]
 
@@ -70,6 +72,12 @@ Rails.application.routes.draw do
       end
     end
     get "/impersonate/:id", to: "sessions#impersonate", as: :impersonate_user
+  end
+
+  constraints AdminLevelConstraint.new(:superadmin, :admin) do
+    namespace :admin do
+      resources :external_users, only: [ :index, :create, :update, :destroy ]
+    end
   end
 
   constraints AdminLevelConstraint.new(:superadmin) do
@@ -113,6 +121,7 @@ Rails.application.routes.draw do
   get "/auth/github/callback", to: "sessions#github_create"
   delete "/auth/github/unlink", to: "sessions#github_unlink", as: :github_unlink
   post "/auth/email", to: "sessions#email", as: :email_auth
+  post "/auth/external", to: "sessions#external", as: :external_auth
   post "/auth/email/add", to: "sessions#add_email", as: :add_email_auth
   delete "/auth/email/unlink", to: "sessions#unlink_email", as: :unlink_email_auth
   get "/auth/token/:token", to: "sessions#token", as: :auth_token

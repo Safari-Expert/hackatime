@@ -180,6 +180,25 @@ class SessionsController < ApplicationController
     redirect_to redirect_path, notice: "Check your email for a sign-in link!"
   end
 
+  def external
+    username = params[:username].to_s.strip
+    password = params[:password].to_s
+    continue_param = safe_return_url(params[:continue].presence)
+    external_user = User.find_by("LOWER(username) = ?", username.downcase)
+
+    unless external_user&.account_kind_external? && external_user.authenticate(password)
+      redirect_to signin_path(continue: continue_param), alert: "Invalid username or password"
+      return
+    end
+
+    session[:user_id] = external_user.id
+
+    PosthogService.identify(external_user)
+    PosthogService.capture(external_user, "user_signed_in", { method: "external_password" })
+
+    redirect_to(continue_param.presence || employee_monitoring_path, notice: "Successfully signed in.")
+  end
+
   def add_email
     unless current_user
       redirect_to root_path, alert: "Please sign in first to add an email"

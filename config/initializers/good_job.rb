@@ -116,6 +116,11 @@ Rails.application.configure do
       class: "SafariExpert::EmployeeMonitoring::RollupJob",
       description: "Refreshes employee monitoring rollups and 5-minute interval snapshots."
     },
+    auto_close_external_work_sessions: {
+      cron: "59 23 * * *",
+      class: "AutoCloseExternalWorkSessionsJob",
+      description: "Closes any external attendance sessions still open at 23:59 UTC."
+    },
     weekly_summary_email: {
       cron: "30 18 * * 0",
       class: "WeeklySummaryEmailJob",

@@ -38,4 +38,25 @@ class NavigationSidebarTest < ApplicationSystemTestCase
       assert_no_link "Feature Flags"
     end
   end
+
+  test "external users only keep the attendance nav entry" do
+    external_user = User.create!(
+      timezone: "UTC",
+      account_kind: :external,
+      display_name_override: "External Nav",
+      username: "external-nav",
+      password: "supersecure123"
+    )
+    external_user.create_employee_monitoring_profile!
+
+    sign_in_as(external_user)
+    visit employee_monitoring_path
+
+    within "aside[data-nav-target='nav'] nav", visible: true do
+      assert_link "Employee Monitoring"
+      assert_no_link "Leaderboards"
+      assert_no_link "Projects"
+      assert_no_link "Settings"
+    end
+  end
 end

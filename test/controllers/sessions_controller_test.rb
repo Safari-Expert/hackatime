@@ -95,6 +95,7 @@ class SessionsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_inertia_component "Auth/SignIn"
     assert_inertia_prop "continue_param", oauth_path
+    assert_equal external_auth_path, inertia_page.dig("props", "external_auth_path")
   end
 
   test "signin renders without continue param when not provided" do
@@ -174,6 +175,54 @@ class SessionsControllerTest < ActionDispatch::IntegrationTest
 
     assert_response :redirect
     assert_redirected_to root_path
+  end
+
+  test "external auth signs in external collaborators with username and password" do
+    user = User.create!(
+      timezone: "UTC",
+      account_kind: :external,
+      display_name_override: "Ext User",
+      username: "ext-user",
+      password: "supersecure123"
+    )
+
+    post external_auth_path, params: {
+      username: "ext-user",
+      password: "supersecure123"
+    }
+
+    assert_response :redirect
+    assert_redirected_to employee_monitoring_path
+    assert_equal user.id, session[:user_id]
+  end
+
+  test "external auth rejects wrong password and standard accounts" do
+    standard_user = User.create!(timezone: "UTC", username: "standard-user")
+    external_user = User.create!(
+      timezone: "UTC",
+      account_kind: :external,
+      display_name_override: "Ext User",
+      username: "ext-user-2",
+      password: "supersecure123"
+    )
+
+    post external_auth_path, params: {
+      username: standard_user.username,
+      password: "whatever123"
+    }
+
+    assert_response :redirect
+    assert_redirected_to signin_path
+    assert_nil session[:user_id]
+
+    post external_auth_path, params: {
+      username: external_user.username,
+      password: "wrong-password"
+    }
+
+    assert_response :redirect
+    assert_redirected_to signin_path
+    assert_nil session[:user_id]
   end
 
   test "slack_new stores oauth nonce and embeds it in state" do

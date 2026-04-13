@@ -25,6 +25,7 @@ class StaticPagesController < InertiaController
       hca_auth_path: hca_auth_path(continue: continue_param),
       slack_auth_path: slack_auth_path(continue: continue_param),
       email_auth_path: email_auth_path,
+      external_auth_path: external_auth_path,
       sign_in_email: params[:sign_in_email].present?,
       show_dev_tool: Rails.env.development?,
       dev_magic_link: (Rails.env.development? ? session.delete(:dev_magic_link) : nil),

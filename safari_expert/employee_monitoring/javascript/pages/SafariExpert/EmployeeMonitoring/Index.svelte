@@ -14,6 +14,7 @@
 
   type RosterRow = {
     id: number;
+    account_kind: string;
     display_name: string;
     username: string | null;
     avatar_url: string | null;
@@ -119,8 +120,33 @@
     after_hours_active: boolean;
   };
 
+  type ScheduleDayRow = {
+    weekday: number;
+    day_label: string;
+    enabled: boolean;
+    expected_start_minute_local: number;
+    expected_end_minute_local: number;
+    expected_seconds: number;
+  };
+
+  type ExternalAttendanceWeekRow = {
+    local_date: string;
+    weekday_label: string;
+    scheduled: boolean;
+    expected_start_at: string | null;
+    expected_end_at: string | null;
+    expected_seconds: number;
+    actual_start_at: string | null;
+    actual_end_at: string | null;
+    actual_seconds: number;
+    start_status: string;
+    hours_status: string;
+    auto_closed: boolean;
+  };
+
   type SelectedUser = {
     id: number;
+    account_kind: string;
     display_name: string;
     username: string | null;
     avatar_url: string | null;
@@ -131,6 +157,7 @@
       expected_start_minute_local: number;
       expected_end_minute_local: number;
       workdays: number[];
+      schedule_days: ScheduleDayRow[];
       start_grace_minutes: number;
       end_grace_minutes: number;
       label: string;
@@ -143,6 +170,14 @@
       language_mix: MixRow[];
       editor_mix: MixRow[];
       commit_markers: CommitMarker[];
+    };
+    attendance?: {
+      state: string;
+      open_session_started_at: string | null;
+      today_seconds: number;
+      week_seconds: number;
+      month_seconds: number;
+      week_rows: ExternalAttendanceWeekRow[];
     };
     trend_14d: Trend;
     trend_30d: Trend;
@@ -171,16 +206,6 @@
     can_edit_schedule: boolean;
     page_path: string;
   } = $props();
-
-  const dayOptions = [
-    { value: 1, label: "Mon" },
-    { value: 2, label: "Tue" },
-    { value: 3, label: "Wed" },
-    { value: 4, label: "Thu" },
-    { value: 5, label: "Fri" },
-    { value: 6, label: "Sat" },
-    { value: 0, label: "Sun" },
-  ];
 
   type ActivityChartSeries = {
     key: string;
@@ -371,6 +396,32 @@
         return "badge badge--neutral";
       default:
         return "badge badge--after";
+    }
+  }
+
+  function externalStartTone(value: string) {
+    switch (value) {
+      case "on_time":
+        return "badge badge--good";
+      case "late":
+        return "badge badge--warn";
+      case "not_started":
+        return "badge badge--critical";
+      default:
+        return "badge badge--neutral";
+    }
+  }
+
+  function externalHoursTone(value: string) {
+    switch (value) {
+      case "met":
+        return "badge badge--good";
+      case "short":
+        return "badge badge--warn";
+      case "not_clocked_out":
+        return "badge badge--critical";
+      default:
+        return "badge badge--neutral";
     }
   }
 
@@ -880,9 +931,14 @@
                   <td>
                     <Link href={row.selection_path} class="row-link">
                       <div class="grid gap-1">
-                        <span class="font-semibold text-surface-content"
-                          >{row.display_name}</span
-                        >
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="font-semibold text-surface-content"
+                            >{row.display_name}</span
+                          >
+                          {#if row.account_kind === "external"}
+                            <span class="badge badge--after">external</span>
+                          {/if}
+                        </div>
                         <span class="text-xs text-muted">
                           {row.username ? `@${row.username}` : `User ${row.id}`}
                         </span>
@@ -928,17 +984,25 @@
                   </td>
                   <td>
                     <div class="grid gap-1 text-sm text-surface-content">
-                      <span
-                        >{row.write_heartbeats_count} writes · {row.commit_count}
-                        commits</span
-                      >
-                      <span>
-                        +{row.commit_line_additions} / -{row.commit_line_deletions}
-                      </span>
-                      <span class="text-xs text-muted">
-                        {row.unique_projects_count} projects · {row.unique_languages_count}
-                        langs
-                      </span>
+                      {#if row.account_kind === "external"}
+                        <span>{formatDuration(row.coding_seconds)} worked</span>
+                        <span>Attendance-only account</span>
+                        <span class="text-xs text-muted">
+                          {row.session_count} clock sessions today
+                        </span>
+                      {:else}
+                        <span
+                          >{row.write_heartbeats_count} writes · {row.commit_count}
+                          commits</span
+                        >
+                        <span>
+                          +{row.commit_line_additions} / -{row.commit_line_deletions}
+                        </span>
+                        <span class="text-xs text-muted">
+                          {row.unique_projects_count} projects · {row.unique_languages_count}
+                          langs
+                        </span>
+                      {/if}
                     </div>
                   </td>
                   <td>
@@ -946,15 +1010,21 @@
                       <span class={signalTone(row.attendance_signal)}>
                         {row.attendance_signal.replaceAll("_", " ")}
                       </span>
-                      <span class={signalTone(row.activity_signal)}>
-                        activity {row.activity_signal}
-                      </span>
-                      <span class={signalTone(row.delivery_signal)}>
-                        delivery {row.delivery_signal}
-                      </span>
-                      <span class={aiTone(row.ai_assisted_output_level)}>
-                        AI {row.ai_assisted_output_level}
-                      </span>
+                      {#if row.account_kind === "external"}
+                        <span class={signalTone(row.activity_signal)}>
+                          attendance {row.activity_signal}
+                        </span>
+                      {:else}
+                        <span class={signalTone(row.activity_signal)}>
+                          activity {row.activity_signal}
+                        </span>
+                        <span class={signalTone(row.delivery_signal)}>
+                          delivery {row.delivery_signal}
+                        </span>
+                        <span class={aiTone(row.ai_assisted_output_level)}>
+                          AI {row.ai_assisted_output_level}
+                        </span>
+                      {/if}
                     </div>
                   </td>
                 </tr>
@@ -967,6 +1037,274 @@
 
     <section class="rounded-2xl border border-surface-200 bg-dark p-4">
       {#if selected_user}
+        {#if selected_user.account_kind === "external"}
+          <div class="grid gap-5">
+            <div class="grid gap-2">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
+                    Selected external collaborator
+                  </p>
+                  <h2 class="m-0 text-2xl font-semibold text-surface-content">
+                    {selected_user.display_name}
+                  </h2>
+                  <p class="m-0 text-sm text-muted">
+                    {selected_user.username
+                      ? `@${selected_user.username}`
+                      : `User ${selected_user.id}`}
+                    {" · "}
+                    {selected_user.schedule.label}
+                  </p>
+                </div>
+                <span
+                  class={selected_user.attendance?.state === "clocked_in"
+                    ? "badge badge--active"
+                    : "badge badge--inactive"}
+                >
+                  {selected_user.attendance?.state?.replaceAll("_", " ") ||
+                    "clocked out"}
+                </span>
+              </div>
+
+              <div class="grid gap-3 md:grid-cols-3">
+                <div class="metric-card">
+                  <p class="metric-card__label">Today</p>
+                  <p class="metric-card__value">
+                    {formatDuration(selected_user.attendance?.today_seconds || 0)}
+                  </p>
+                  <p class="metric-card__hint">
+                    {selected_user.attendance?.state === "clocked_in"
+                      ? `Started ${formatDateTime(selected_user.attendance?.open_session_started_at || null)}`
+                      : "No active work session"}
+                  </p>
+                </div>
+                <div class="metric-card">
+                  <p class="metric-card__label">This week</p>
+                  <p class="metric-card__value">
+                    {formatDuration(selected_user.attendance?.week_seconds || 0)}
+                  </p>
+                  <p class="metric-card__hint">
+                    Current week total
+                  </p>
+                </div>
+                <div class="metric-card">
+                  <p class="metric-card__label">This month</p>
+                  <p class="metric-card__value">
+                    {formatDuration(selected_user.attendance?.month_seconds || 0)}
+                  </p>
+                  <p class="metric-card__hint">
+                    Current month total
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
+              <div class="rounded-2xl border border-surface-200 bg-surface p-4">
+                <h3 class="m-0 text-lg font-semibold text-surface-content">
+                  Current week
+                </h3>
+                <p class="m-1 text-sm text-muted">
+                  Expected schedule versus actual attendance.
+                </p>
+
+                <div class="mt-4 overflow-x-auto">
+                  <table class="min-w-full monitoring-table monitoring-table--compact">
+                    <thead>
+                      <tr>
+                        <th>Day</th>
+                        <th>Expected start</th>
+                        <th>Expected finish</th>
+                        <th>Expected hours</th>
+                        <th>Actual start</th>
+                        <th>Actual finish</th>
+                        <th>Actual hours</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each selected_user.attendance?.week_rows || [] as row}
+                        <tr>
+                          <td>
+                            <div class="grid gap-1">
+                              <span class="font-medium text-surface-content">
+                                {row.weekday_label}
+                              </span>
+                              <span class="text-xs text-muted">
+                                {formatShortDate(row.local_date)}
+                              </span>
+                            </div>
+                          </td>
+                          <td>{formatDateTime(row.expected_start_at)}</td>
+                          <td>{formatDateTime(row.expected_end_at)}</td>
+                          <td>{formatDuration(row.expected_seconds)}</td>
+                          <td>{formatDateTime(row.actual_start_at)}</td>
+                          <td>{formatDateTime(row.actual_end_at)}</td>
+                          <td>{formatDuration(row.actual_seconds)}</td>
+                          <td>
+                            <div class="flex flex-wrap gap-2">
+                              <span class={externalStartTone(row.start_status)}>
+                                {row.start_status.replaceAll("_", " ")}
+                              </span>
+                              <span class={externalHoursTone(row.hours_status)}>
+                                {row.hours_status.replaceAll("_", " ")}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-surface-200 bg-surface p-4">
+                <h3 class="m-0 text-lg font-semibold text-surface-content">
+                  Schedule
+                </h3>
+                <div class="mt-4 grid gap-3">
+                  <div class="flex items-center justify-between gap-3 text-sm">
+                    <span class="text-muted">Timezone</span>
+                    <strong class="text-surface-content">
+                      {selected_user.schedule.effective_timezone}
+                    </strong>
+                  </div>
+                  {#each selected_user.schedule.schedule_days as scheduleDay}
+                    <div class="flex items-center justify-between gap-3 rounded-xl border border-surface-200 bg-dark px-3 py-2 text-sm">
+                      <span class="text-surface-content">{scheduleDay.day_label}</span>
+                      {#if scheduleDay.enabled}
+                        <span class="text-muted">
+                          {formatMinuteOfDay(scheduleDay.expected_start_minute_local)} -
+                          {formatMinuteOfDay(scheduleDay.expected_end_minute_local)}
+                        </span>
+                      {:else}
+                        <span class="text-muted">Off</span>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+
+                {#if can_edit_schedule}
+                  <form
+                    method="POST"
+                    action={selected_user.schedule.update_path}
+                    class="mt-4 grid gap-3 rounded-xl border border-surface-200 bg-dark p-4"
+                  >
+                    <input
+                      type="hidden"
+                      name="authenticity_token"
+                      value={csrfToken}
+                    />
+                    <input type="hidden" name="_method" value="patch" />
+                    <input
+                      type="hidden"
+                      name="profile[monitoring_enabled]"
+                      value="false"
+                    />
+                    <h4 class="m-0 text-sm font-semibold uppercase tracking-[0.22em] text-muted">
+                      Edit schedule
+                    </h4>
+                    <label class="grid gap-2 text-sm text-muted">
+                      <span>Timezone override</span>
+                      <input
+                        class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
+                        type="text"
+                        name="profile[timezone_override]"
+                        value={selected_user.schedule.timezone_override || ""}
+                        placeholder={selected_user.schedule.effective_timezone}
+                      />
+                    </label>
+                    <div class="grid gap-3">
+                      {#each selected_user.schedule.schedule_days as scheduleDay, index}
+                        <div class="grid gap-3 rounded-xl border border-surface-200 bg-surface p-3 sm:grid-cols-[auto_minmax(0,1fr)_1fr_1fr] sm:items-center">
+                          <label class="workday-chip workday-chip--toggle">
+                            <input
+                              type="hidden"
+                              name={`profile[schedule_days][${index}][weekday]`}
+                              value={scheduleDay.weekday}
+                            />
+                            <input
+                              type="checkbox"
+                              name={`profile[schedule_days][${index}][enabled]`}
+                              value="true"
+                              checked={scheduleDay.enabled}
+                            />
+                            <span>{scheduleDay.day_label}</span>
+                          </label>
+                          <span class="text-xs uppercase tracking-[0.16em] text-muted">
+                            {scheduleDay.enabled
+                              ? "Scheduled"
+                              : "Not scheduled"}
+                          </span>
+                          <label class="grid gap-2 text-sm text-muted">
+                            <span>Expected start</span>
+                            <input
+                              class="rounded-xl border border-surface-200 bg-dark px-3 py-2 text-surface-content"
+                              type="time"
+                              step="60"
+                              name={`profile[schedule_days][${index}][expected_start_minute_local]`}
+                              value={formatMinuteOfDay(
+                                scheduleDay.expected_start_minute_local,
+                              )}
+                            />
+                          </label>
+                          <label class="grid gap-2 text-sm text-muted">
+                            <span>Expected finish</span>
+                            <input
+                              class="rounded-xl border border-surface-200 bg-dark px-3 py-2 text-surface-content"
+                              type="time"
+                              step="60"
+                              name={`profile[schedule_days][${index}][expected_end_minute_local]`}
+                              value={formatMinuteOfDay(
+                                scheduleDay.expected_end_minute_local,
+                              )}
+                            />
+                          </label>
+                        </div>
+                      {/each}
+                    </div>
+                    <div class="grid gap-3 sm:grid-cols-2">
+                      <label class="grid gap-2 text-sm text-muted">
+                        <span>Start grace (minutes)</span>
+                        <input
+                          class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
+                          type="number"
+                          min="0"
+                          max="240"
+                          name="profile[start_grace_minutes]"
+                          value={selected_user.schedule.start_grace_minutes}
+                        />
+                      </label>
+                      <label class="grid gap-2 text-sm text-muted">
+                        <span>End grace (minutes)</span>
+                        <input
+                          class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
+                          type="number"
+                          min="0"
+                          max="240"
+                          name="profile[end_grace_minutes]"
+                          value={selected_user.schedule.end_grace_minutes}
+                        />
+                      </label>
+                    </div>
+                    <label class="workday-chip workday-chip--toggle">
+                      <input
+                        type="checkbox"
+                        name="profile[monitoring_enabled]"
+                        value="true"
+                        checked={selected_user.schedule.monitoring_enabled}
+                      />
+                      <span>Monitoring enabled</span>
+                    </label>
+                    <Button type="submit" variant="primary" class="rounded-xl">
+                      Save schedule
+                    </Button>
+                  </form>
+                {/if}
+              </div>
+            </div>
+          </div>
+        {:else}
         <div class="grid gap-5">
           <div class="grid gap-2">
             <div class="flex flex-wrap items-center justify-between gap-3">
@@ -1297,8 +1635,8 @@
                         </div>
                         {#if !hasChurnData}
                           <p class="market-chart__panel-note">
-                            No raw heartbeat additions or deletions have been
-                            recorded for these buckets yet.
+                            No additions or deletions have been recorded for
+                            these buckets yet.
                           </p>
                         {/if}
                       </div>
@@ -1534,13 +1872,9 @@
               <div class="mt-4 grid gap-4">
                 <div class="grid gap-2 text-sm">
                   <div class="flex items-center justify-between gap-3">
-                    <span class="text-muted">Window</span>
-                    <strong class="text-surface-content">
-                      {formatMinuteOfDay(
-                        selected_user.schedule.expected_start_minute_local,
-                      )} - {formatMinuteOfDay(
-                        selected_user.schedule.expected_end_minute_local,
-                      )}
+                    <span class="text-muted">Schedule</span>
+                    <strong class="text-right text-surface-content">
+                      {selected_user.schedule.label}
                     </strong>
                   </div>
                   <div class="flex items-center justify-between gap-3">
@@ -1605,33 +1939,52 @@
                         placeholder={selected_user.schedule.effective_timezone}
                       />
                     </label>
-                    <div class="grid gap-3 sm:grid-cols-2">
-                      <label class="grid gap-2 text-sm text-muted">
-                        <span>Expected start</span>
-                        <input
-                          class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
-                          type="time"
-                          step="60"
-                          name="profile[expected_start_minute_local]"
-                          value={formatMinuteOfDay(
-                            selected_user.schedule.expected_start_minute_local,
-                          )}
-                          placeholder="09:00"
-                        />
-                      </label>
-                      <label class="grid gap-2 text-sm text-muted">
-                        <span>Expected finish</span>
-                        <input
-                          class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
-                          type="time"
-                          step="60"
-                          name="profile[expected_end_minute_local]"
-                          value={formatMinuteOfDay(
-                            selected_user.schedule.expected_end_minute_local,
-                          )}
-                          placeholder="17:00"
-                        />
-                      </label>
+                    <div class="grid gap-3">
+                      {#each selected_user.schedule.schedule_days as scheduleDay, index}
+                        <div class="grid gap-3 rounded-xl border border-surface-200 bg-surface p-3 sm:grid-cols-[auto_minmax(0,1fr)_1fr_1fr] sm:items-center">
+                          <label class="workday-chip workday-chip--toggle">
+                            <input
+                              type="hidden"
+                              name={`profile[schedule_days][${index}][weekday]`}
+                              value={scheduleDay.weekday}
+                            />
+                            <input
+                              type="checkbox"
+                              name={`profile[schedule_days][${index}][enabled]`}
+                              value="true"
+                              checked={scheduleDay.enabled}
+                            />
+                            <span>{scheduleDay.day_label}</span>
+                          </label>
+                          <span class="text-xs uppercase tracking-[0.16em] text-muted">
+                            {scheduleDay.enabled ? "Scheduled" : "Not scheduled"}
+                          </span>
+                          <label class="grid gap-2 text-sm text-muted">
+                            <span>Expected start</span>
+                            <input
+                              class="rounded-xl border border-surface-200 bg-dark px-3 py-2 text-surface-content"
+                              type="time"
+                              step="60"
+                              name={`profile[schedule_days][${index}][expected_start_minute_local]`}
+                              value={formatMinuteOfDay(
+                                scheduleDay.expected_start_minute_local,
+                              )}
+                            />
+                          </label>
+                          <label class="grid gap-2 text-sm text-muted">
+                            <span>Expected finish</span>
+                            <input
+                              class="rounded-xl border border-surface-200 bg-dark px-3 py-2 text-surface-content"
+                              type="time"
+                              step="60"
+                              name={`profile[schedule_days][${index}][expected_end_minute_local]`}
+                              value={formatMinuteOfDay(
+                                scheduleDay.expected_end_minute_local,
+                              )}
+                            />
+                          </label>
+                        </div>
+                      {/each}
                     </div>
                     <div class="grid gap-3 sm:grid-cols-2">
                       <label class="grid gap-2 text-sm text-muted">
@@ -1657,29 +2010,6 @@
                         />
                       </label>
                     </div>
-                    <fieldset class="grid gap-2 border-0 p-0">
-                      <legend class="text-sm text-muted">Workdays</legend>
-                      <input
-                        type="hidden"
-                        name="profile[workdays][]"
-                        value=""
-                      />
-                      <div class="flex flex-wrap gap-2">
-                        {#each dayOptions as option}
-                          <label class="workday-chip">
-                            <input
-                              type="checkbox"
-                              name="profile[workdays][]"
-                              value={option.value}
-                              checked={selected_user.schedule.workdays.includes(
-                                option.value,
-                              )}
-                            />
-                            <span>{option.label}</span>
-                          </label>
-                        {/each}
-                      </div>
-                    </fieldset>
                     <label class="workday-chip workday-chip--toggle">
                       <input
                         type="checkbox"
@@ -1698,7 +2028,7 @@
                     class="rounded-xl border border-surface-200 bg-dark p-4 text-sm text-muted"
                   >
                     This view is read-only for viewers. Admins and superadmins
-                    can edit schedule windows here.
+                    can edit per-day schedules here.
                   </div>
                 {/if}
               </div>
@@ -1743,6 +2073,7 @@
             </div>
           </div>
         </div>
+        {/if}
       {:else}
         <div
           class="rounded-2xl border border-surface-200 bg-surface p-8 text-center text-muted"

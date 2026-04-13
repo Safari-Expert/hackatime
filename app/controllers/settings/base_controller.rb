@@ -77,6 +77,10 @@ class Settings::BaseController < InertiaController
       admin_items << { label: "Admin API Keys", href: admin_admin_api_keys_path }
     end
 
+    if current_user&.admin_level.in?(%w[admin superadmin])
+      admin_items << { label: "External Collaborators", href: admin_external_users_path }
+    end
+
     if current_user&.admin_level == "superadmin"
       admin_items << { label: "Admin Management", href: admin_admin_users_path }
       pending_count = DeletionRequest.pending.count

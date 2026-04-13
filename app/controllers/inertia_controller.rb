@@ -66,6 +66,10 @@ class InertiaController < ApplicationController
     links = []
     if current_user
       links << inertia_link("Employee Monitoring", employee_monitoring_path, active: employee_monitoring_active?, inertia: true)
+      if current_user.account_kind_external?
+        links << { label: "Logout", action: "logout" }
+        return links
+      end
     else
       links << inertia_link("Home", root_path, active: helpers.current_page?(root_path), inertia: true)
     end
@@ -140,7 +144,8 @@ class InertiaController < ApplicationController
       country_code: current_user.country_code,
       country_name: country&.common_name,
       streak_days: current_user.streak_days,
-      admin_level: current_user.admin_level
+      admin_level: current_user.admin_level,
+      account_kind: current_user.account_kind
     }
   end
 

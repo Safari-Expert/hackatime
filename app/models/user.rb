@@ -152,6 +152,7 @@ class User < ApplicationRecord
         "LOWER(users.username) LIKE :p OR " \
         "LOWER(users.slack_username) LIKE :p OR " \
         "LOWER(users.github_username) LIKE :p OR " \
+        "LOWER(users.display_name_override) LIKE :p OR " \
         "LOWER(email_addresses.email) LIKE :p OR " \
         "CAST(users.id AS TEXT) LIKE :p",
         p: pattern

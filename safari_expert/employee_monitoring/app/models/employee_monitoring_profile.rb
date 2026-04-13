@@ -11,6 +11,7 @@ class EmployeeMonitoringProfile < ApplicationRecord
     5 => "Fri",
     6 => "Sat"
   }.freeze
+  EDITOR_WEEKDAYS = [ 1, 2, 3, 4, 5, 6, 0 ].freeze
 
   attribute :monitoring_enabled, default: true
   attribute :expected_start_minute_local, default: 9.hours.to_i / 60
@@ -113,6 +114,23 @@ class EmployeeMonitoringProfile < ApplicationRecord
         expected_start_minute_local: schedule_day.expected_start_minute_local,
         expected_end_minute_local: schedule_day.expected_end_minute_local,
         expected_seconds: schedule_day.expected_seconds
+      }
+    end
+  end
+
+  def schedule_editor_payload
+    schedule_rows = schedule_days.index_by(&:weekday)
+
+    EDITOR_WEEKDAYS.map do |weekday|
+      schedule_day = schedule_rows[weekday]
+
+      {
+        weekday: weekday,
+        day_label: DAY_NAMES.fetch(weekday),
+        enabled: schedule_day.present?,
+        expected_start_minute_local: schedule_day&.expected_start_minute_local || expected_start_minute_local,
+        expected_end_minute_local: schedule_day&.expected_end_minute_local || expected_end_minute_local,
+        expected_seconds: schedule_day&.expected_seconds || (expected_end_minute_local - expected_start_minute_local).minutes.to_i
       }
     end
   end

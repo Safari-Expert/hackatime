@@ -26,7 +26,7 @@ class SettingsNavigationControllerTest < ActionDispatch::IntegrationTest
     admin_group = groups.find { |group| group["title"] == "Admin" }
 
     assert_not_nil admin_group
-    assert_equal [ "Admin API Keys", "Admin Management", "Account Deletions" ],
+    assert_equal [ "Admin API Keys", "External Collaborators", "Admin Management", "Account Deletions" ],
       admin_group.fetch("items").map { |item| item["label"] }
     assert_equal 1, admin_group.fetch("items").last["badge"]
   end
