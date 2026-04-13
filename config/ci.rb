@@ -8,7 +8,7 @@ CI.run do
   step "Security: Brakeman code analysis", "bin/brakeman --quiet --no-pager --exit-on-warn --exit-on-error"
 
   step "Setup: Test DB", "env RAILS_ENV=test bin/rails db:create db:schema:load"
-  step "Setup: Vite assets", "env RAILS_ENV=test bin/vite build"
+  step "Setup: Vite assets", "rm -rf public/vite-test && env RAILS_ENV=test bin/vite build"
   step "Tests: Rails", "env RAILS_ENV=test bin/rails test"
   step "Tests: System", "env RAILS_ENV=test bin/rails test:system"
   step "Tests: Seeds", "env RAILS_ENV=test bin/rails db:seed:replant"

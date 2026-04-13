@@ -8,6 +8,10 @@ def system!(*args)
 end
 
 FileUtils.chdir APP_ROOT do
+  if File.directory?(".git")
+    system("git", "config", "--global", "--add", "safe.directory", APP_ROOT, exception: false)
+  end
+
   # This script is a way to set up or update your development environment automatically.
   # This script is idempotent, so that you can run it at any time and get an expectable outcome.
   # Add necessary setup steps to this file.

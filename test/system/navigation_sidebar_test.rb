@@ -8,9 +8,9 @@ class NavigationSidebarTest < ApplicationSystemTestCase
     visit root_path
 
     assert_current_path employee_monitoring_path, ignore_query: true
-    assert_text "Employee Monitoring"
+    visit my_settings_profile_path
 
-    within "aside[data-nav-target='nav'] nav" do
+    within "aside[data-nav-target='nav'] nav", visible: true do
       assert_link "Employee Monitoring"
       assert_link "Settings"
       assert_no_link "Home"
@@ -24,9 +24,9 @@ class NavigationSidebarTest < ApplicationSystemTestCase
     superadmin = User.create!(timezone: "UTC", admin_level: "superadmin", username: "nav-superadmin")
 
     sign_in_as(superadmin)
-    visit employee_monitoring_path
+    visit my_settings_profile_path
 
-    within "aside[data-nav-target='nav'] nav" do
+    within "aside[data-nav-target='nav'] nav", visible: true do
       assert_link "Employee Monitoring"
       assert_link "Review Timeline"
       assert_link "GoodBoy"

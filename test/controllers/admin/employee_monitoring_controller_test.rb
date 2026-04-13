@@ -93,6 +93,36 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
     end
   end
 
+  test "keeps after-hours bucket status active on the timeline payload" do
+    travel_to Time.utc(2026, 4, 13, 20, 3, 0) do
+      Heartbeat.create!(
+        user: @monitored,
+        time: Time.utc(2026, 4, 13, 20, 0, 0).to_i,
+        category: "coding",
+        project: "internal_ui",
+        language: "Ruby",
+        editor: "VS Code",
+        entity: "/app/internal_ui/app/page.tsx",
+        is_write: true,
+        line_additions: 3,
+        line_deletions: 1,
+        source_type: :test_entry
+      )
+
+      get employee_monitoring_path(user_id: @monitored.id, search: @search_term)
+
+      assert_response :success
+      assert_equal "after_end", inertia_page.dig("props", "selected_user", "current_day", "status")
+
+      current_bucket = inertia_page.dig("props", "selected_user", "current_day", "timeline_buckets")
+                                  .find { |bucket| bucket["bucket_started_at"] == "2026-04-13T20:00:00Z" }
+
+      assert_not_nil current_bucket
+      assert_equal "active", current_bucket["status"]
+      assert_equal false, current_bucket["in_window"]
+    end
+  end
+
   test "legacy admin path redirects to the canonical employee monitoring path" do
     travel_to monitoring_reference_time do
       get admin_employee_monitoring_path(user_id: @monitored.id, search: @search_term)

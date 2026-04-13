@@ -42,15 +42,27 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
       sign_in_as(admin)
       visit admin_employee_monitoring_path(user_id: monitored.id)
 
+      assert_no_text "Search developers"
+      assert_no_text "Apply filters"
+      assert_no_text "Focused bucket"
+      assert_no_text "Session spans"
+      assert_no_text "Monitored users"
+      assert_no_selector ".summary-card"
+
       within(:xpath, "//h3[contains(., '5-minute activity chart')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
         assert_text "Coding time by language per 5-minute bucket"
         assert_text "Line churn by 5-minute bucket"
-        assert_text "PRESENCE STATUS"
+        assert_text "Active < 5m · idle < 15m"
+        assert_text "5 MIN BUCKETS"
+        assert_no_text "PRESENCE STATUS"
+        assert_no_text "Before start"
+        assert_no_text "After end"
         assert_no_selector ".activity-chart__controls"
-        assert_text "+20 adds"
-        assert_text "-5 deletes"
-        assert_text "Go: 1m"
-        assert_text "Ruby: 1m"
+        assert_no_selector ".activity-chart__legend-groups"
+        assert_text "+20 / -5"
+        assert_text "2m"
+        assert_text "Ruby"
+        assert_text "Go"
 
         shared_axis = find(".market-chart__x-axis")
         shared_bucket_count = shared_axis["data-bucket-count"].to_i
@@ -63,6 +75,8 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
         assert_operator dom_count(".market-chart__track--languages .market-chart__rect"), :>=, 2
         assert_operator dom_count(".market-chart__track--churn .market-chart__rect"), :>=, 2
         assert_operator dom_count(".market-chart__track--status .status-rail__rect"), :>=, 1
+        refute_includes bucket_statuses(".market-chart__track--status"), "before_start"
+        refute_includes bucket_statuses(".market-chart__track--status"), "after_end"
 
         assert_equal 1, all(".market-chart__track--languages .market-chart__slot--active").count
         assert_equal 1, all(".market-chart__track--churn .market-chart__slot--active").count
@@ -137,6 +151,14 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
       Array.from(
         document.querySelectorAll("#{track_selector} [data-bucket-started-at='#{bucket_started_at}'][data-series-key]")
       ).map((element) => Number(element.getAttribute("height")))
+    JS
+  end
+
+  def bucket_statuses(track_selector)
+    page.evaluate_script(<<~JS)
+      Array.from(
+        document.querySelectorAll("#{track_selector} [data-status]")
+      ).map((element) => element.getAttribute("data-status"))
     JS
   end
 

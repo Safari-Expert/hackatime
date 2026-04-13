@@ -199,6 +199,28 @@ class SafariExpert::EmployeeMonitoring::RollupBuilderTest < ActiveSupport::TestC
     end
   end
 
+  test "keeps timeline buckets active after scheduled hours when activity continues" do
+    travel_to Time.utc(2026, 3, 30, 20, 3, 0) do
+      user = User.create!(timezone: "UTC", github_username: "after-hours-bucket-user")
+      EmployeeMonitoringProfile.for_user(user).save!
+
+      create_heartbeat(user, at: Time.utc(2026, 3, 30, 20, 0, 0))
+
+      payload = SafariExpert::EmployeeMonitoring::RollupBuilder.new(
+        user: user,
+        now: Time.current
+      ).call
+
+      bucket = payload[:timeline_buckets].find { |entry| entry[:bucket_started_at] == "2026-03-30T20:00:00Z" }
+
+      assert_not_nil bucket
+      assert_equal "active", bucket[:status]
+      assert_equal false, bucket[:in_window]
+      assert_equal "after_end", payload[:status]
+      assert payload[:after_hours_active]
+    end
+  end
+
   private
 
   def create_heartbeat(user, at:, category: "coding", language: "Ruby", is_write: true, additions: 0, deletions: 0)

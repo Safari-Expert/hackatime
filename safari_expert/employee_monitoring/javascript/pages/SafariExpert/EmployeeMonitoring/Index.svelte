@@ -242,13 +242,6 @@
     { key: "line_additions", label: "Additions", color: "#4ade80" },
     { key: "line_deletions", label: "Deletions", color: "#f87171" },
   ];
-  const PRESENCE_SERIES = [
-    { label: "Active", className: "chart-legend__swatch--active" },
-    { label: "Idle", className: "chart-legend__swatch--idle" },
-    { label: "Before start", className: "chart-legend__swatch--before" },
-    { label: "After end", className: "chart-legend__swatch--after" },
-    { label: "Inactive", className: "chart-legend__swatch--inactive" },
-  ];
   const CHART_SLOT_UNITS = 18;
   const CHART_GAP_UNITS = 4;
   const LANGUAGE_TRACK_VIEWBOX_HEIGHT = 160;
@@ -479,10 +472,6 @@
         return "#3f7f66";
       case "idle":
         return "#8a7744";
-      case "before_start":
-        return "#4b5563";
-      case "after_end":
-        return "#475569";
       default:
         return "#7f4d4d";
     }
@@ -851,87 +840,6 @@
     </div>
   </div>
 
-  <form
-    method="GET"
-    action={page_path}
-    class="mb-6 grid gap-3 rounded-2xl border border-surface-200 bg-dark p-4 lg:grid-cols-[1.6fr_220px_auto]"
-  >
-    {#if selected_user}
-      <input type="hidden" name="user_id" value={selected_user.id} />
-    {/if}
-    <label class="grid gap-2 text-sm text-muted">
-      <span>Search developers</span>
-      <input
-        class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
-        type="search"
-        name="search"
-        value={overview.filters.search}
-        placeholder="Search by username, GitHub, email, or id"
-      />
-    </label>
-    <label class="grid gap-2 text-sm text-muted">
-      <span>Status focus</span>
-      <select
-        class="rounded-xl border border-surface-200 bg-surface px-3 py-2 text-surface-content"
-        name="status"
-      >
-        <option value="" selected={overview.filters.status === ""}
-          >All statuses</option
-        >
-        <option value="active" selected={overview.filters.status === "active"}
-          >Active in window</option
-        >
-        <option value="idle" selected={overview.filters.status === "idle"}
-          >Idle in window</option
-        >
-        <option
-          value="inactive"
-          selected={overview.filters.status === "inactive"}>Inactive</option
-        >
-        <option
-          value="before_start"
-          selected={overview.filters.status === "before_start"}
-          >Before start</option
-        >
-        <option
-          value="after_end"
-          selected={overview.filters.status === "after_end"}>After end</option
-        >
-        <option
-          value="not_started_yet"
-          selected={overview.filters.status === "not_started_yet"}
-          >Not started yet</option
-        >
-        <option
-          value="ended_early"
-          selected={overview.filters.status === "ended_early"}
-          >Ended early</option
-        >
-        <option
-          value="after_hours"
-          selected={overview.filters.status === "after_hours"}
-          >After-hours active</option
-        >
-      </select>
-    </label>
-    <div class="flex items-end">
-      <Button type="submit" variant="primary" class="w-full rounded-xl">
-        Apply filters
-      </Button>
-    </div>
-  </form>
-
-  <section class="mb-6 grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-    {#each [{ label: "Monitored users", value: overview.summary.monitored_users, tone: "summary-card" }, { label: "Active in window", value: overview.summary.active_in_window, tone: "summary-card summary-card--active" }, { label: "Idle in window", value: overview.summary.idle_in_window, tone: "summary-card summary-card--idle" }, { label: "Not started", value: overview.summary.not_started_yet, tone: "summary-card summary-card--warn" }, { label: "Ended early", value: overview.summary.ended_early, tone: "summary-card summary-card--critical" }, { label: "After-hours active", value: overview.summary.after_hours_active, tone: "summary-card summary-card--after" }] as card}
-      <div class={card.tone}>
-        <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
-          {card.label}
-        </p>
-        <p class="mt-3 text-3xl font-bold text-surface-content">{card.value}</p>
-      </div>
-    {/each}
-  </section>
-
   <div class="monitoring-grid">
     <section class="rounded-2xl border border-surface-200 bg-dark p-4">
       <div class="mb-4 flex items-center justify-between gap-3">
@@ -1137,54 +1045,11 @@
                   One shared bucket ladder drives all three panes. Languages
                   stay in the primary panel, raw additions and deletions live
                   underneath as a subchart, and presence status sits on the same
-                  communal time axis at the bottom.
+                  communal time axis at the bottom. The chart stays visible even
+                  outside the scheduled window so after-hours activity is still
+                  tracked.
                 </p>
               </div>
-
-              {#if activeTimelineBucket}
-                <div class="activity-chart__focus-card">
-                  <p class="activity-chart__focus-label">Focused bucket</p>
-                  <strong class="text-surface-content">
-                    {formatDateTime(
-                      activeTimelineBucket.bucket.bucket_started_at,
-                    )}
-                  </strong>
-                  <p class="m-0 text-sm text-muted">
-                    {humanizeStatus(activeTimelineBucket.bucket.status)} · {formatDuration(
-                      activeTimelineBucket.bucket.presence_seconds,
-                    )} presence
-                  </p>
-                  <div class="activity-chart__focus-grid">
-                    <span
-                      >{formatDuration(
-                        activeTimelineBucket.bucket.coding_seconds,
-                      )} coding</span
-                    >
-                    <span
-                      >+{activeTimelineBucket.bucket.line_additions} adds</span
-                    >
-                    <span
-                      >-{activeTimelineBucket.bucket.line_deletions} deletes</span
-                    >
-                    <span
-                      >{activeTimelineBucket.bucket.write_heartbeats_count} writes</span
-                    >
-                  </div>
-                  {#if activeTimelineBucket.languages.segments.length > 0}
-                    <div
-                      class="activity-chart__focus-grid activity-chart__focus-grid--compact"
-                    >
-                      {#each activeTimelineBucket.languages.segments.slice(0, 3) as segment}
-                        <span
-                          >{segment.label}: {formatDuration(
-                            segment.value,
-                          )}</span
-                        >
-                      {/each}
-                    </div>
-                  {/if}
-                </div>
-              {/if}
             </div>
 
             <div class="mb-4 mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1197,57 +1062,6 @@
               {/each}
             </div>
 
-            <div class="activity-chart__legend-groups">
-              <div class="activity-chart__legend-block">
-                <p class="activity-chart__eyebrow">Languages</p>
-                <div class="chart-legend">
-                  {#if languageSeries.length === 0}
-                    <span class="text-xs text-muted"
-                      >No language stacks yet.</span
-                    >
-                  {:else}
-                    {#each languageSeries as series}
-                      <span class="chart-legend__item">
-                        <span
-                          class="chart-legend__swatch"
-                          style:background-color={series.color}
-                        ></span>
-                        <span>{series.label}</span>
-                      </span>
-                    {/each}
-                  {/if}
-                </div>
-              </div>
-
-              <div class="activity-chart__legend-block">
-                <p class="activity-chart__eyebrow">Adds / Deletes</p>
-                <div class="chart-legend">
-                  {#each CHURN_SERIES as series}
-                    <span class="chart-legend__item">
-                      <span
-                        class="chart-legend__swatch"
-                        style:background-color={series.color}
-                      ></span>
-                      <span>{series.label}</span>
-                    </span>
-                  {/each}
-                </div>
-              </div>
-
-              <div class="activity-chart__legend-block">
-                <p class="activity-chart__eyebrow">Presence status</p>
-                <div class="chart-legend">
-                  {#each PRESENCE_SERIES as series}
-                    <span class="chart-legend__item">
-                      <span class={`chart-legend__swatch ${series.className}`}
-                      ></span>
-                      <span>{series.label}</span>
-                    </span>
-                  {/each}
-                </div>
-              </div>
-            </div>
-
             {#if timelineBuckets.length === 0}
               <div class="activity-chart__empty-state">
                 No 5-minute buckets are available for the selected day yet.
@@ -1257,7 +1071,6 @@
                 <div class="market-chart__frame">
                   <div class="market-chart__axes">
                     <div class="market-chart__axis-block">
-                      <p class="market-chart__axis-title">Languages</p>
                       <p class="market-chart__axis-subtitle">
                         Coding time by language per 5-minute bucket
                       </p>
@@ -1269,7 +1082,6 @@
                     </div>
 
                     <div class="market-chart__axis-block">
-                      <p class="market-chart__axis-title">Adds / Deletes</p>
                       <p class="market-chart__axis-subtitle">
                         Line churn by 5-minute bucket
                       </p>
@@ -1283,7 +1095,6 @@
                     <div
                       class="market-chart__axis-block market-chart__axis-block--status"
                     >
-                      <p class="market-chart__axis-title">PRESENCE STATUS</p>
                       <p class="market-chart__axis-subtitle">
                         Active &lt; 5m · idle &lt; 15m
                       </p>
@@ -1302,6 +1113,27 @@
                       <div
                         class="market-chart__track market-chart__track--languages"
                       >
+                        <div class="market-chart__track-header">
+                          <div class="chart-legend chart-legend--track">
+                            {#if languageSeries.length === 0}
+                              <span class="chart-legend__item">
+                                <span class="text-xs text-muted"
+                                  >No language stacks yet.</span
+                                >
+                              </span>
+                            {:else}
+                              {#each languageSeries as series}
+                                <span class="chart-legend__item">
+                                  <span
+                                    class="chart-legend__swatch"
+                                    style:background-color={series.color}
+                                  ></span>
+                                  <span>{series.label}</span>
+                                </span>
+                              {/each}
+                            {/if}
+                          </div>
+                        </div>
                         <div class="market-chart__plot">
                           <svg
                             class="market-chart__svg"
@@ -1383,6 +1215,19 @@
                       <div
                         class="market-chart__track market-chart__track--churn"
                       >
+                        <div class="market-chart__track-header">
+                          <div class="chart-legend chart-legend--track">
+                            {#each CHURN_SERIES as series}
+                              <span class="chart-legend__item">
+                                <span
+                                  class="chart-legend__swatch"
+                                  style:background-color={series.color}
+                                ></span>
+                                <span>{series.label}</span>
+                              </span>
+                            {/each}
+                          </div>
+                        </div>
                         <div class="market-chart__plot">
                           <svg
                             class="market-chart__svg"
@@ -1860,52 +1705,7 @@
             </div>
           </div>
 
-          <div class="grid gap-4 lg:grid-cols-2">
-            <div class="rounded-2xl border border-surface-200 bg-surface p-4">
-              <h3 class="m-0 text-lg font-semibold text-surface-content">
-                Session spans
-              </h3>
-              <div class="mt-4 grid gap-3">
-                {#if selected_user.current_day.session_spans.length === 0}
-                  <p class="m-0 text-sm text-muted">
-                    No recorded sessions for this day yet.
-                  </p>
-                {:else}
-                  {#each selected_user.current_day.session_spans as session}
-                    <div
-                      class="rounded-xl border border-surface-200 bg-dark p-3"
-                    >
-                      <div
-                        class="flex flex-wrap items-center justify-between gap-3"
-                      >
-                        <strong class="text-surface-content">
-                          {formatDateTime(session.start_at)} - {formatDateTime(
-                            session.end_at,
-                          )}
-                        </strong>
-                        <span class="text-sm text-muted"
-                          >{formatDuration(session.duration_seconds)}</span
-                        >
-                      </div>
-                      <div class="mt-2 grid gap-1 text-xs text-muted">
-                        <span
-                          >Projects: {session.projects.join(", ") ||
-                            "None"}</span
-                        >
-                        <span
-                          >Languages: {session.languages.join(", ") ||
-                            "None"}</span
-                        >
-                        <span
-                          >Editors: {session.editors.join(", ") || "None"}</span
-                        >
-                      </div>
-                    </div>
-                  {/each}
-                {/if}
-              </div>
-            </div>
-
+          <div class="grid gap-4">
             <div class="rounded-2xl border border-surface-200 bg-surface p-4">
               <h3 class="m-0 text-lg font-semibold text-surface-content">
                 Recent attendance history
@@ -2141,62 +1941,6 @@
     color: var(--color-muted);
   }
 
-  .activity-chart__eyebrow {
-    margin: 0;
-    font-size: 0.72rem;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    color: var(--color-muted);
-  }
-
-  .activity-chart__focus-card {
-    width: min(100%, 18rem);
-    border: 1px solid var(--color-surface-200);
-    border-radius: 1rem;
-    background: var(--color-dark);
-    padding: 0.9rem 1rem;
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .activity-chart__focus-label {
-    margin: 0;
-    font-size: 0.72rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--color-muted);
-  }
-
-  .activity-chart__focus-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-    color: var(--color-muted);
-    font-size: 0.82rem;
-  }
-
-  .activity-chart__focus-grid--compact {
-    margin-top: -0.1rem;
-  }
-
-  .activity-chart__focus-grid span {
-    border-radius: 999px;
-    border: 1px solid var(--color-surface-200);
-    background: var(--color-surface);
-    padding: 0.28rem 0.55rem;
-  }
-
-  .activity-chart__legend-groups {
-    display: grid;
-    gap: 0.9rem;
-    margin-bottom: 1rem;
-  }
-
-  .activity-chart__legend-block {
-    display: grid;
-    gap: 0.35rem;
-  }
-
   .chart-legend {
     display: flex;
     flex-wrap: wrap;
@@ -2232,14 +1976,6 @@
     background: rgba(255, 107, 107, 0.28);
   }
 
-  .chart-legend__swatch--before {
-    background: rgba(160, 174, 192, 0.24);
-  }
-
-  .chart-legend__swatch--after {
-    background: rgba(111, 179, 255, 0.28);
-  }
-
   .activity-chart__empty-state {
     border: 1px dashed var(--color-surface-200);
     border-radius: 1rem;
@@ -2269,7 +2005,7 @@
 
   .market-chart__frame {
     display: grid;
-    grid-template-columns: 4.4rem minmax(0, 1fr);
+    grid-template-columns: 7.5rem minmax(0, 1fr);
     gap: 0.85rem;
     align-items: start;
   }
@@ -2283,21 +2019,13 @@
 
   .market-chart__axis-block {
     display: grid;
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto 1fr;
     gap: 0.35rem;
   }
 
   .market-chart__axis-block--status {
-    grid-template-rows: auto auto;
+    grid-template-rows: auto;
     align-content: center;
-  }
-
-  .market-chart__axis-title {
-    margin: 0;
-    font-size: 0.72rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--color-muted);
   }
 
   .market-chart__axis-subtitle {
@@ -2346,6 +2074,20 @@
     overflow: hidden;
     min-height: 0;
     padding: 0.38rem 0.32rem;
+  }
+
+  .market-chart__track-header {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    min-height: 1rem;
+    margin-bottom: 0.32rem;
+    padding: 0 0.18rem;
+  }
+
+  .chart-legend--track {
+    justify-content: flex-end;
+    gap: 0.6rem;
   }
 
   .market-chart__track--languages,
@@ -2537,7 +2279,7 @@
     }
 
     .market-chart__axis-block {
-      grid-template-rows: auto auto auto;
+      grid-template-rows: auto auto;
     }
 
     .market-chart__axis-block--status {
@@ -2566,10 +2308,6 @@
 
     .market-chart__track--status {
       height: 2.3rem;
-    }
-
-    .activity-chart__focus-card {
-      width: 100%;
     }
 
     .market-chart__panel-note {

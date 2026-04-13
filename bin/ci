@@ -1,5 +1,10 @@
 #!/usr/bin/env ruby
 
+app_root = File.expand_path("..", __dir__)
+if File.directory?(File.join(app_root, ".git"))
+  system("git", "config", "--global", "--add", "safe.directory", app_root, exception: false)
+end
+
 require_relative "../config/boot"
 require "active_support/continuous_integration"
 

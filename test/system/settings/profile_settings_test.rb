@@ -26,22 +26,31 @@ class ProfileSettingsTest < ApplicationSystemTestCase
     assert_selector "[data-settings-subnav-item][data-active='true']", text: "API key"
   end
 
-  test "profile settings updates country and username" do
-    @user.update!(country_code: "CA", username: "old_name")
-    new_username = "settings_#{SecureRandom.hex(4)}"
+  test "profile settings updates country" do
+    @user.update!(country_code: "CA")
     country_name = ISO3166::Country["US"].common_name
 
     visit my_settings_profile_path
 
     choose_select_option("country_code", country_name)
     click_on "Save region settings"
+
     assert_text "Settings updated successfully"
-    assert_equal "US", @user.reload.country_code
+    assert_equal "US", wait_for_record_attribute(@user, :country_code, "US")
+    assert_selector "#country_code", text: country_name
+  end
+
+  test "profile settings updates username" do
+    @user.update!(username: "old_name")
+    new_username = "settings_#{SecureRandom.hex(4)}"
+
+    visit my_settings_profile_path
 
     fill_in "Username", with: new_username
     click_on "Save username"
+
     assert_text "Settings updated successfully"
-    assert_equal new_username, @user.reload.username
+    assert_equal new_username, wait_for_record_attribute(@user, :username, new_username)
   end
 
   test "profile settings rejects invalid username" do
@@ -89,7 +98,7 @@ class ProfileSettingsTest < ApplicationSystemTestCase
     visit my_settings_profile_path
 
     within "[data-settings-sidebar]" do
-      assert_text "Resources"
+      assert_text "RESOURCES"
       assert_link "Docs"
       assert_link "Extensions"
       assert_link "My OAuth Apps"

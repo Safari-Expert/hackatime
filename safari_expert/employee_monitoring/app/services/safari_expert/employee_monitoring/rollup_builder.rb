@@ -37,7 +37,7 @@ module SafariExpert
         heartbeats = load_heartbeats(day_range)
         intervals = build_intervals(heartbeats, reference_now, local_date)
         commits = load_commits(day_range)
-        timeline = build_timeline(heartbeats, intervals, window, reference_now, zone, local_date, profile)
+        timeline = build_timeline(heartbeats, intervals, window, reference_now, zone, local_date)
 
         payload = build_payload(
           profile: profile,
@@ -201,7 +201,7 @@ module SafariExpert
         end
       end
 
-      def build_timeline(heartbeats, intervals, window, reference_now, zone, local_date, profile)
+      def build_timeline(heartbeats, intervals, window, reference_now, zone, local_date)
         default_start =
           if window
             [ window[:start_at] - 60.minutes, zone.local(local_date.year, local_date.month, local_date.day) ].max
@@ -225,7 +225,7 @@ module SafariExpert
           started_at = bucket_start + (index * Constants::BUCKET_SIZE_MINUTES.minutes)
           {
             bucket_started_at: started_at.iso8601,
-            status: bucket_status(started_at, window, heartbeats, profile),
+            status: bucket_status(started_at, heartbeats),
             in_window: window.present? && started_at >= window[:start_at] && started_at < window[:end_at],
             presence_seconds: 0,
             coding_seconds: 0,
@@ -496,13 +496,8 @@ module SafariExpert
         }
       end
 
-      def bucket_status(bucket_started_at, window, heartbeats, profile)
+      def bucket_status(bucket_started_at, heartbeats)
         bucket_end = bucket_started_at + Constants::BUCKET_SIZE_MINUTES.minutes
-
-        if window
-          return "before_start" if bucket_end <= (window[:start_at] - profile.start_grace_minutes.minutes)
-          return "after_end" if bucket_started_at >= (window[:end_at] + profile.end_grace_minutes.minutes)
-        end
 
         last_seen = heartbeats.reverse.find { |heartbeat| heartbeat.at <= bucket_end }&.at
         status_from_last_seen(last_seen, bucket_end)

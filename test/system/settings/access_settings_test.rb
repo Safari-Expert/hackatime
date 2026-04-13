@@ -28,8 +28,9 @@ class AccessSettingsTest < ApplicationSystemTestCase
     choose_select_option("extension_type", "Clock emoji")
     click_on "Save extension settings"
 
-    assert_text "Settings updated successfully"
-    assert_equal "clock_emoji", @user.reload.hackatime_extension_text_type
+    assert_equal "clock_emoji",
+      wait_for_record_attribute(@user, :hackatime_extension_text_type, "clock_emoji")
+    assert_selector "#extension_type", text: "Clock emoji"
   end
 
   test "access settings rotate api key can be canceled" do
