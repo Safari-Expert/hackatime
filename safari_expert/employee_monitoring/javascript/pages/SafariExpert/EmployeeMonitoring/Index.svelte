@@ -182,7 +182,6 @@
     { value: 0, label: "Sun" },
   ];
 
-  type ChartMode = "churn" | "languages";
   type ActivityChartSeries = {
     key: string;
     label: string;
@@ -200,6 +199,12 @@
   type ActivitySummaryStat = {
     label: string;
     value: string;
+    detail: string;
+  };
+  type FocusedActivityBucket = {
+    bucket: TimelineBucket;
+    churn: ActivityChartBucket;
+    languages: ActivityChartBucket;
   };
 
   const LANGUAGE_COLORS = [
@@ -218,9 +223,15 @@
     { key: "line_additions", label: "Additions", color: "#4ade80" },
     { key: "line_deletions", label: "Deletions", color: "#f87171" },
   ];
+  const PRESENCE_SERIES = [
+    { label: "Active", className: "chart-legend__swatch--active" },
+    { label: "Idle", className: "chart-legend__swatch--idle" },
+    { label: "Before start", className: "chart-legend__swatch--before" },
+    { label: "After end", className: "chart-legend__swatch--after" },
+    { label: "Inactive", className: "chart-legend__swatch--inactive" },
+  ];
 
   let csrfToken = $state("");
-  let chartMode = $state<ChartMode>("churn");
   let activeBucketStartedAt = $state<string | null>(null);
 
   onMount(() => {
@@ -352,7 +363,7 @@
     return index === 0 || index === buckets.length - 1 || bucketDate.getMinutes() === 0;
   }
 
-  function chartScaleMax(mode: ChartMode, maxValue: number) {
+  function chartScaleMax(mode: "churn" | "languages", maxValue: number) {
     if (maxValue <= 0) return mode === "churn" ? 10 : 300;
 
     if (mode === "churn") {
@@ -369,11 +380,11 @@
     return values.filter((value, index) => values.indexOf(value) === index);
   }
 
-  function chartAxisFormat(mode: ChartMode, value: number) {
+  function chartAxisFormat(mode: "churn" | "languages", value: number) {
     return mode === "churn" ? formatLineAxis(value) : formatDuration(value);
   }
 
-  function buildBucketTitle(chartBucket: ActivityChartBucket, mode: ChartMode) {
+  function buildBucketTitle(chartBucket: ActivityChartBucket, mode: "churn" | "languages") {
     const lines = [
       `${formatDateTime(chartBucket.bucket.bucket_started_at)} · ${humanizeStatus(chartBucket.bucket.status)}`,
     ];
@@ -396,9 +407,16 @@
     return lines.join("\n");
   }
 
-  function defaultChartBucket(buckets: ActivityChartBucket[]) {
+  function bucketHasVisibleActivity(bucket: TimelineBucket) {
+    return bucket.presence_seconds > 0 ||
+      bucket.coding_seconds > 0 ||
+      bucket.line_additions > 0 ||
+      bucket.line_deletions > 0;
+  }
+
+  function defaultTimelineBucket(buckets: TimelineBucket[]) {
     for (let index = buckets.length - 1; index >= 0; index -= 1) {
-      if (buckets[index].total > 0) return buckets[index];
+      if (bucketHasVisibleActivity(buckets[index])) return buckets[index];
     }
 
     return buckets[buckets.length - 1] || null;
@@ -523,56 +541,92 @@
     chartScaleMax("languages", Math.max(0, ...languageChartBuckets.map((bucket) => bucket.total)))
   ));
 
-  const chartSeries = $derived.by<ActivityChartSeries[]>(() => (
-    chartMode === "churn" ? CHURN_SERIES : languageSeries
-  ));
-
-  const activeChartBuckets = $derived.by<ActivityChartBucket[]>(() => (
-    chartMode === "churn" ? churnChartBuckets : languageChartBuckets
-  ));
-
-  const activeChartBucket = $derived.by(() => {
-    if (activeChartBuckets.length === 0) return null;
-
+  const activeTimelineIndex = $derived.by(() => {
+    if (timelineBuckets.length === 0) return -1;
     if (activeBucketStartedAt) {
-      const hoveredBucket = activeChartBuckets.find((bucket) => (
-        bucket.bucket.bucket_started_at === activeBucketStartedAt
+      const hoveredIndex = timelineBuckets.findIndex((bucket) => (
+        bucket.bucket_started_at === activeBucketStartedAt
       ));
-      if (hoveredBucket) return hoveredBucket;
+      if (hoveredIndex >= 0) return hoveredIndex;
     }
 
-    return defaultChartBucket(activeChartBuckets);
+    const fallbackBucket = defaultTimelineBucket(timelineBuckets);
+    if (!fallbackBucket) return -1;
+
+    return timelineBuckets.findIndex((bucket) => (
+      bucket.bucket_started_at === fallbackBucket.bucket_started_at
+    ));
+  });
+
+  const activeTimelineBucket = $derived.by<FocusedActivityBucket | null>(() => {
+    if (activeTimelineIndex < 0) return null;
+
+    return {
+      bucket: timelineBuckets[activeTimelineIndex],
+      churn: churnChartBuckets[activeTimelineIndex],
+      languages: languageChartBuckets[activeTimelineIndex],
+    };
   });
 
   const hasChurnData = $derived.by(() => churnChartBuckets.some((bucket) => bucket.total > 0));
 
   const hasLanguageData = $derived.by(() => languageChartBuckets.some((bucket) => bucket.total > 0));
 
-  const chartSummaryStats = $derived.by<ActivitySummaryStat[]>(() => {
-    if (chartMode === "churn") {
-      const totalAdditions = timelineBuckets.reduce((sum, bucket) => sum + bucket.line_additions, 0);
-      const totalDeletions = timelineBuckets.reduce((sum, bucket) => sum + bucket.line_deletions, 0);
-      const bucketsWithChurn = churnChartBuckets.filter((bucket) => bucket.total > 0).length;
+  const bucketCount = $derived.by(() => Math.max(timelineBuckets.length, 1));
 
-      return [
-        { label: "Total adds", value: `+${totalAdditions}` },
-        { label: "Total deletes", value: `-${totalDeletions}` },
-        { label: "Buckets with churn", value: `${bucketsWithChurn}/${timelineBuckets.length}` },
-      ];
-    }
+  const bucketColumnWidth = $derived.by(() => {
+    if (timelineBuckets.length >= 144) return "0.72rem";
+    if (timelineBuckets.length >= 120) return "0.8rem";
+    if (timelineBuckets.length >= 96) return "0.9rem";
+    if (timelineBuckets.length >= 72) return "0.98rem";
+    return "1.08rem";
+  });
 
+  const axisTickLabels = $derived.by(() => (
+    timelineBuckets.map((bucket, index) => ({
+      bucket_started_at: bucket.bucket_started_at,
+      label: shouldShowBucketTick(bucket, index, timelineBuckets) ? formatShortTime(bucket.bucket_started_at) : "",
+    }))
+  ));
+
+  const activityChartSummaryStats = $derived.by<ActivitySummaryStat[]>(() => {
+    const totalAdditions = timelineBuckets.reduce((sum, bucket) => sum + bucket.line_additions, 0);
+    const totalDeletions = timelineBuckets.reduce((sum, bucket) => sum + bucket.line_deletions, 0);
+    const bucketsWithChurn = churnChartBuckets.filter((bucket) => bucket.total > 0).length;
+    const bucketsWithPresence = timelineBuckets.filter((bucket) => bucket.presence_seconds > 0).length;
     const activeLanguages = new Set<string>();
+
     for (const bucket of timelineBuckets) {
       for (const stat of bucket.language_breakdown) {
         activeLanguages.add(stat.language);
       }
     }
+
     const bucketsWithCoding = languageChartBuckets.filter((bucket) => bucket.total > 0).length;
 
     return [
-      { label: "Total coding", value: formatDuration(selected_user?.current_day.coding_seconds || 0) },
-      { label: "Active languages", value: `${activeLanguages.size}` },
-      { label: "Buckets with coding", value: `${bucketsWithCoding}/${timelineBuckets.length}` },
+      {
+        label: "Total coding",
+        value: formatDuration(selected_user?.current_day.coding_seconds || 0),
+        detail: `${bucketsWithCoding}/${timelineBuckets.length} buckets with language-attributed coding`,
+      },
+      {
+        label: "Language mix",
+        value: `${activeLanguages.size}`,
+        detail: activeLanguages.size === 0
+          ? "No language-attributed coding yet"
+          : `${Math.min(topLanguageKeys.length, activeLanguages.size)} highlighted + ${hasOtherLanguages ? "Other grouped" : "no overflow group"}`,
+      },
+      {
+        label: "Line churn",
+        value: `+${totalAdditions} / -${totalDeletions}`,
+        detail: `${bucketsWithChurn}/${timelineBuckets.length} buckets with additions or deletions`,
+      },
+      {
+        label: "Presence",
+        value: `${bucketsWithPresence}/${timelineBuckets.length}`,
+        detail: "Buckets with any recorded presence across the selected day",
+      },
     ];
   });
 </script>
@@ -825,85 +879,62 @@
           </div>
 
           <div class="rounded-2xl border border-surface-200 bg-surface p-4">
-            <div class="mb-4 flex flex-wrap items-start justify-between gap-4">
-              <div>
+            <div class="activity-chart__meta">
+              <div class="activity-chart__intro">
                 <h3 class="m-0 text-lg font-semibold text-surface-content">
                   5-minute activity chart
                 </h3>
-                <p class="m-1 text-sm text-muted">
-                  Switch between two chart views instead of forcing churn and language
-                  data through the same plot. Presence remains separate in the status rail.
+                <p class="m-0 text-sm text-muted">
+                  One shared bucket ladder drives all three panes. Languages stay in the
+                  primary panel, raw additions and deletions live underneath as a subchart,
+                  and presence status sits on the same communal time axis at the bottom.
                 </p>
               </div>
-              <div class="activity-chart__controls">
-                <Button
-                  type="button"
-                  unstyled
-                  class={chartMode === "churn" ? "chart-mode-button chart-mode-button--active" : "chart-mode-button"}
-                  onclick={() => {
-                    chartMode = "churn";
-                    activeBucketStartedAt = null;
-                  }}
-                >
-                  Adds / Deletes
-                </Button>
-                <Button
-                  type="button"
-                  unstyled
-                  class={chartMode === "languages" ? "chart-mode-button chart-mode-button--active" : "chart-mode-button"}
-                  onclick={() => {
-                    chartMode = "languages";
-                    activeBucketStartedAt = null;
-                  }}
-                >
-                  Languages
-                </Button>
-              </div>
+
+              {#if activeTimelineBucket}
+                <div class="activity-chart__focus-card">
+                  <p class="activity-chart__focus-label">Focused bucket</p>
+                  <strong class="text-surface-content">
+                    {formatDateTime(activeTimelineBucket.bucket.bucket_started_at)}
+                  </strong>
+                  <p class="m-0 text-sm text-muted">
+                    {humanizeStatus(activeTimelineBucket.bucket.status)} · {formatDuration(activeTimelineBucket.bucket.presence_seconds)} presence
+                  </p>
+                  <div class="activity-chart__focus-grid">
+                    <span>{formatDuration(activeTimelineBucket.bucket.coding_seconds)} coding</span>
+                    <span>+{activeTimelineBucket.bucket.line_additions} adds</span>
+                    <span>-{activeTimelineBucket.bucket.line_deletions} deletes</span>
+                    <span>{activeTimelineBucket.bucket.write_heartbeats_count} writes</span>
+                  </div>
+                  {#if activeTimelineBucket.languages.segments.length > 0}
+                    <div class="activity-chart__focus-grid activity-chart__focus-grid--compact">
+                      {#each activeTimelineBucket.languages.segments.slice(0, 3) as segment}
+                        <span>{segment.label}: {formatDuration(segment.value)}</span>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
             </div>
-            <div class="mb-4 grid gap-3 md:grid-cols-3">
-              {#each chartSummaryStats as stat}
+
+            <div class="mb-4 mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {#each activityChartSummaryStats as stat}
                 <div class="activity-chart__summary-card">
                   <p class="activity-chart__summary-label">{stat.label}</p>
                   <p class="activity-chart__summary-value">{stat.value}</p>
+                  <p class="activity-chart__summary-detail">{stat.detail}</p>
                 </div>
               {/each}
             </div>
 
-            {#if chartMode === "churn"}
-              <div class="grid gap-4">
-                <div class="activity-chart__mode-header">
-                  <div class="grid gap-1">
-                    <p class="activity-chart__eyebrow">Adds / Deletes</p>
-                    <h4 class="m-0 text-base font-semibold text-surface-content">
-                      Line churn by 5-minute bucket
-                    </h4>
-                    <p class="m-0 text-sm text-muted">
-                      Each column stacks raw heartbeat additions and deletions. Use hover
-                      or focus to inspect a specific bucket.
-                    </p>
-                  </div>
-                  {#if activeChartBucket}
-                    <div class="activity-chart__focus-card">
-                      <p class="activity-chart__focus-label">Focused bucket</p>
-                      <strong class="text-surface-content">
-                        {formatDateTime(activeChartBucket.bucket.bucket_started_at)}
-                      </strong>
-                      <p class="m-0 text-sm text-muted">
-                        {humanizeStatus(activeChartBucket.bucket.status)}
-                      </p>
-                      <div class="activity-chart__focus-grid">
-                        <span>+{activeChartBucket.bucket.line_additions} adds</span>
-                        <span>-{activeChartBucket.bucket.line_deletions} deletes</span>
-                        <span>{formatDuration(activeChartBucket.bucket.coding_seconds)} coding</span>
-                        <span>{activeChartBucket.bucket.write_heartbeats_count} writes</span>
-                      </div>
-                    </div>
-                  {/if}
-                </div>
-
-                <div class="flex items-center justify-between gap-3">
-                  <div class="chart-legend">
-                    {#each CHURN_SERIES as series}
+            <div class="activity-chart__legend-groups">
+              <div class="activity-chart__legend-block">
+                <p class="activity-chart__eyebrow">Languages</p>
+                <div class="chart-legend">
+                  {#if languageSeries.length === 0}
+                    <span class="text-xs text-muted">No language stacks yet.</span>
+                  {:else}
+                    {#each languageSeries as series}
                       <span class="chart-legend__item">
                         <span
                           class="chart-legend__swatch"
@@ -912,186 +943,215 @@
                         <span>{series.label}</span>
                       </span>
                     {/each}
-                  </div>
-                  <div class="text-xs text-muted">
-                    {selected_user.current_day.timeline_buckets.length} buckets
-                  </div>
-                </div>
-
-                {#if !hasChurnData}
-                  <div class="activity-chart__empty-state">
-                    No additions or deletions were recorded in raw heartbeats for the selected day yet.
-                  </div>
-                {:else}
-                  <div class="timeline-chart">
-                    <div class="timeline-chart__axis">
-                      {#each buildTickValues(churnScaleMax) as tick}
-                        <span>{chartAxisFormat("churn", tick)}</span>
-                      {/each}
-                    </div>
-                    <div class="timeline-chart__scroll" onmouseleave={() => (activeBucketStartedAt = null)}>
-                      <div class="timeline-chart__columns">
-                        {#each churnChartBuckets as chartBucket}
-                          <div class="timeline-chart__column">
-                            <div class="timeline-chart__plot">
-                              <div
-                                class="timeline-chart__stack"
-                                class:timeline-chart__stack--active={activeChartBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at}
-                                title={buildBucketTitle(chartBucket, "churn")}
-                                tabindex="0"
-                                aria-label={buildBucketTitle(chartBucket, "churn")}
-                                onmouseenter={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
-                                onfocus={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
-                              >
-                                {#if chartBucket.total > 0}
-                                  {#each chartBucket.segments as segment}
-                                    <div
-                                      class="timeline-chart__segment"
-                                      style:height={`${(segment.value / churnScaleMax) * 100}%`}
-                                      style:background-color={segment.color}
-                                    ></div>
-                                  {/each}
-                                {:else}
-                                  <div class="timeline-chart__zero"></div>
-                                {/if}
-                              </div>
-                            </div>
-                            <div class="timeline-chart__tick">
-                              {#if chartBucket.tick_label}
-                                <span>{chartBucket.tick_label}</span>
-                              {/if}
-                            </div>
-                          </div>
-                        {/each}
-                      </div>
-                    </div>
-                  </div>
-                {/if}
-              </div>
-            {:else}
-              <div class="grid gap-4">
-                <div class="activity-chart__mode-header">
-                  <div class="grid gap-1">
-                    <p class="activity-chart__eyebrow">Languages</p>
-                    <h4 class="m-0 text-base font-semibold text-surface-content">
-                      Coding time by language per 5-minute bucket
-                    </h4>
-                    <p class="m-0 text-sm text-muted">
-                      Each column stacks coding seconds by language. Top languages stay
-                      separate and the remainder is grouped into Other.
-                    </p>
-                  </div>
-                  {#if activeChartBucket}
-                    <div class="activity-chart__focus-card">
-                      <p class="activity-chart__focus-label">Focused bucket</p>
-                      <strong class="text-surface-content">
-                        {formatDateTime(activeChartBucket.bucket.bucket_started_at)}
-                      </strong>
-                      <p class="m-0 text-sm text-muted">
-                        {humanizeStatus(activeChartBucket.bucket.status)}
-                      </p>
-                      <div class="activity-chart__focus-grid">
-                        <span>{formatDuration(activeChartBucket.bucket.coding_seconds)} coding</span>
-                        <span>{activeChartBucket.segments.length} language stacks</span>
-                        {#each activeChartBucket.segments.slice(0, 2) as segment}
-                          <span>{segment.label}: {formatDuration(segment.value)}</span>
-                        {/each}
-                      </div>
-                    </div>
                   {/if}
                 </div>
+              </div>
 
-                <div class="flex items-center justify-between gap-3">
-                  <div class="chart-legend">
-                    {#each chartSeries as series}
-                      <span class="chart-legend__item">
-                        <span
-                          class="chart-legend__swatch"
-                          style:background-color={series.color}
-                        ></span>
-                        <span>{series.label}</span>
-                      </span>
-                    {/each}
-                  </div>
-                  <div class="text-xs text-muted">
-                    {selected_user.current_day.timeline_buckets.length} buckets
-                  </div>
+              <div class="activity-chart__legend-block">
+                <p class="activity-chart__eyebrow">Adds / Deletes</p>
+                <div class="chart-legend">
+                  {#each CHURN_SERIES as series}
+                    <span class="chart-legend__item">
+                      <span
+                        class="chart-legend__swatch"
+                        style:background-color={series.color}
+                      ></span>
+                      <span>{series.label}</span>
+                    </span>
+                  {/each}
                 </div>
-
-                {#if !hasLanguageData}
-                  <div class="activity-chart__empty-state">
-                    No language-attributed coding activity exists for the selected day yet.
-                  </div>
-                {:else}
-                  <div class="timeline-chart">
-                    <div class="timeline-chart__axis">
-                      {#each buildTickValues(languageScaleMax) as tick}
-                        <span>{chartAxisFormat("languages", tick)}</span>
-                      {/each}
-                    </div>
-                    <div class="timeline-chart__scroll" onmouseleave={() => (activeBucketStartedAt = null)}>
-                      <div class="timeline-chart__columns">
-                        {#each languageChartBuckets as chartBucket}
-                          <div class="timeline-chart__column">
-                            <div class="timeline-chart__plot">
-                              <div
-                                class="timeline-chart__stack"
-                                class:timeline-chart__stack--active={activeChartBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at}
-                                title={buildBucketTitle(chartBucket, "languages")}
-                                tabindex="0"
-                                aria-label={buildBucketTitle(chartBucket, "languages")}
-                                onmouseenter={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
-                                onfocus={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
-                              >
-                                {#if chartBucket.total > 0}
-                                  {#each chartBucket.segments as segment}
-                                    <div
-                                      class="timeline-chart__segment"
-                                      style:height={`${(segment.value / languageScaleMax) * 100}%`}
-                                      style:background-color={segment.color}
-                                    ></div>
-                                  {/each}
-                                {:else}
-                                  <div class="timeline-chart__zero"></div>
-                                {/if}
-                              </div>
-                            </div>
-                            <div class="timeline-chart__tick">
-                              {#if chartBucket.tick_label}
-                                <span>{chartBucket.tick_label}</span>
-                              {/if}
-                            </div>
-                          </div>
-                        {/each}
-                      </div>
-                    </div>
-                  </div>
-                {/if}
               </div>
-            {/if}
 
-            <div class="mt-4 grid gap-2">
-              <div class="flex items-center justify-between gap-3">
-                <p class="m-0 text-xs uppercase tracking-[0.22em] text-muted">
-                  Presence status
-                </p>
-                <span class="text-xs text-muted">
-                  Active = last heartbeat within 5m, idle within 15m
-                </span>
-              </div>
-              <div
-                class="status-rail"
-                data-bucket-count={selected_user.current_day.timeline_buckets.length}
-                style:grid-template-columns={`repeat(${selected_user.current_day.timeline_buckets.length}, minmax(0, 1fr))`}
-              >
-                {#each selected_user.current_day.timeline_buckets as bucket}
-                  <div
-                    class={statusRailTone(bucket)}
-                    title={`${formatDateTime(bucket.bucket_started_at)} | ${humanizeStatus(bucket.status)} | ${formatDuration(bucket.presence_seconds)} presence`}
-                  ></div>
-                {/each}
+              <div class="activity-chart__legend-block">
+                <p class="activity-chart__eyebrow">Presence status</p>
+                <div class="chart-legend">
+                  {#each PRESENCE_SERIES as series}
+                    <span class="chart-legend__item">
+                      <span class={`chart-legend__swatch ${series.className}`}></span>
+                      <span>{series.label}</span>
+                    </span>
+                  {/each}
+                </div>
               </div>
             </div>
+
+            {#if timelineBuckets.length === 0}
+              <div class="activity-chart__empty-state">
+                No 5-minute buckets are available for the selected day yet.
+              </div>
+            {:else}
+              <div class="market-chart" data-bucket-count={bucketCount}>
+                <div class="market-chart__frame">
+                  <div class="market-chart__axes">
+                    <div class="market-chart__axis-block">
+                      <p class="market-chart__axis-title">Languages</p>
+                      <p class="market-chart__axis-subtitle">Coding time by language per 5-minute bucket</p>
+                      <div class="market-chart__y-axis">
+                        {#each buildTickValues(languageScaleMax) as tick}
+                          <span>{chartAxisFormat("languages", tick)}</span>
+                        {/each}
+                      </div>
+                    </div>
+
+                    <div class="market-chart__axis-block">
+                      <p class="market-chart__axis-title">Adds / Deletes</p>
+                      <p class="market-chart__axis-subtitle">Line churn by 5-minute bucket</p>
+                      <div class="market-chart__y-axis">
+                        {#each buildTickValues(churnScaleMax) as tick}
+                          <span>{chartAxisFormat("churn", tick)}</span>
+                        {/each}
+                      </div>
+                    </div>
+
+                    <div class="market-chart__axis-block market-chart__axis-block--status">
+                      <p class="market-chart__axis-title">PRESENCE STATUS</p>
+                      <p class="market-chart__axis-subtitle">Active &lt; 5m · idle &lt; 15m</p>
+                    </div>
+
+                    <div class="market-chart__axis-footer">
+                      <span>5 min buckets</span>
+                    </div>
+                  </div>
+
+                  <div class="market-chart__scroll">
+                    <div
+                      class="market-chart__timeline"
+                      style={`--bucket-count: ${bucketCount}; --bucket-width: ${bucketColumnWidth};`}
+                    >
+                      <div class="market-chart__track market-chart__track--languages">
+                        <div
+                          class="market-chart__grid market-chart__grid--bars"
+                          data-track="languages"
+                          data-bucket-count={bucketCount}
+                        >
+                          {#each languageChartBuckets as chartBucket}
+                            <div
+                              class:market-chart__slot--active={activeTimelineBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at}
+                              class="market-chart__slot"
+                            >
+                              <Button
+                                type="button"
+                                unstyled
+                                class={activeTimelineBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at
+                                  ? "market-chart__stack market-chart__stack--active"
+                                  : "market-chart__stack"}
+                                title={buildBucketTitle(chartBucket, "languages")}
+                                aria-label={buildBucketTitle(chartBucket, "languages")}
+                                onclick={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
+                                onmouseenter={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
+                                onfocus={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
+                              >
+                                {#if chartBucket.total > 0}
+                                  {#each chartBucket.segments as segment}
+                                    <span
+                                      class="market-chart__segment"
+                                      style:height={`${(segment.value / languageScaleMax) * 100}%`}
+                                      style:background-color={segment.color}
+                                    ></span>
+                                  {/each}
+                                {:else}
+                                  <span class="market-chart__zero"></span>
+                                {/if}
+                              </Button>
+                            </div>
+                          {/each}
+                        </div>
+                        {#if !hasLanguageData}
+                          <p class="market-chart__panel-note">
+                            No language-attributed coding activity has been recorded for these buckets yet.
+                          </p>
+                        {/if}
+                      </div>
+
+                      <div class="market-chart__track market-chart__track--churn">
+                        <div
+                          class="market-chart__grid market-chart__grid--bars"
+                          data-track="churn"
+                          data-bucket-count={bucketCount}
+                        >
+                          {#each churnChartBuckets as chartBucket}
+                            <div
+                              class:market-chart__slot--active={activeTimelineBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at}
+                              class="market-chart__slot"
+                            >
+                              <Button
+                                type="button"
+                                unstyled
+                                class={activeTimelineBucket?.bucket.bucket_started_at === chartBucket.bucket.bucket_started_at
+                                  ? "market-chart__stack market-chart__stack--active"
+                                  : "market-chart__stack"}
+                                title={buildBucketTitle(chartBucket, "churn")}
+                                aria-label={buildBucketTitle(chartBucket, "churn")}
+                                onclick={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
+                                onmouseenter={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
+                                onfocus={() => (activeBucketStartedAt = chartBucket.bucket.bucket_started_at)}
+                              >
+                                {#if chartBucket.total > 0}
+                                  {#each chartBucket.segments as segment}
+                                    <span
+                                      class="market-chart__segment"
+                                      style:height={`${(segment.value / churnScaleMax) * 100}%`}
+                                      style:background-color={segment.color}
+                                    ></span>
+                                  {/each}
+                                {:else}
+                                  <span class="market-chart__zero"></span>
+                                {/if}
+                              </Button>
+                            </div>
+                          {/each}
+                        </div>
+                        {#if !hasChurnData}
+                          <p class="market-chart__panel-note">
+                            No raw heartbeat additions or deletions have been recorded for these buckets yet.
+                          </p>
+                        {/if}
+                      </div>
+
+                      <div class="market-chart__track market-chart__track--status">
+                        <div
+                          class="market-chart__grid market-chart__grid--status status-rail"
+                          data-track="status"
+                          data-bucket-count={bucketCount}
+                        >
+                          {#each timelineBuckets as bucket}
+                            <div
+                              class:market-chart__slot--active={activeTimelineBucket?.bucket.bucket_started_at === bucket.bucket_started_at}
+                              class="market-chart__slot"
+                            >
+                              <Button
+                                type="button"
+                                unstyled
+                                class={activeTimelineBucket?.bucket.bucket_started_at === bucket.bucket_started_at
+                                  ? "market-chart__status-button market-chart__status-button--active"
+                                  : "market-chart__status-button"}
+                                title={`${formatDateTime(bucket.bucket_started_at)} · ${humanizeStatus(bucket.status)}\nPresence: ${formatDuration(bucket.presence_seconds)}\nCoding: ${formatDuration(bucket.coding_seconds)}`}
+                                aria-label={`${formatDateTime(bucket.bucket_started_at)} · ${humanizeStatus(bucket.status)}`}
+                                onclick={() => (activeBucketStartedAt = bucket.bucket_started_at)}
+                                onmouseenter={() => (activeBucketStartedAt = bucket.bucket_started_at)}
+                                onfocus={() => (activeBucketStartedAt = bucket.bucket_started_at)}
+                              >
+                                <span class={statusRailTone(bucket)}></span>
+                              </Button>
+                            </div>
+                          {/each}
+                        </div>
+                      </div>
+
+                      <div class="market-chart__x-axis" data-bucket-count={bucketCount}>
+                        {#each axisTickLabels as tick}
+                          <div class="market-chart__tick-slot">
+                            {#if tick.label}
+                              <span>{tick.label}</span>
+                            {/if}
+                          </div>
+                        {/each}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            {/if}
           </div>
 
           <div class="grid gap-4 lg:grid-cols-3">
@@ -1542,38 +1602,18 @@
     font-size: 0.9rem;
   }
 
-  .activity-chart__controls {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
+  .activity-chart__meta {
+    display: flex;
     flex-wrap: wrap;
-    padding: 0.25rem;
-    border-radius: 999px;
-    border: 1px solid var(--color-surface-200);
-    background: var(--color-dark);
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
   }
 
-  .chart-mode-button {
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--color-muted);
-    border-radius: 999px;
-    padding: 0.5rem 0.9rem;
-    font-size: 0.82rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    transition:
-      background 120ms ease,
-      color 120ms ease,
-      border-color 120ms ease,
-      transform 120ms ease;
-  }
-
-  .chart-mode-button--active {
-    background: rgba(255, 191, 72, 0.16);
-    border-color: rgba(255, 191, 72, 0.4);
-    color: var(--color-surface-content);
-    transform: translateY(-1px);
+  .activity-chart__intro {
+    display: grid;
+    gap: 0.45rem;
+    max-width: 46rem;
   }
 
   .activity-chart__summary-card {
@@ -1598,12 +1638,10 @@
     color: var(--color-surface-content);
   }
 
-  .activity-chart__mode-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
+  .activity-chart__summary-detail {
+    margin: 0.35rem 0 0;
+    font-size: 0.82rem;
+    color: var(--color-muted);
   }
 
   .activity-chart__eyebrow {
@@ -1640,11 +1678,26 @@
     font-size: 0.82rem;
   }
 
+  .activity-chart__focus-grid--compact {
+    margin-top: -0.1rem;
+  }
+
   .activity-chart__focus-grid span {
     border-radius: 999px;
     border: 1px solid var(--color-surface-200);
     background: var(--color-surface);
     padding: 0.28rem 0.55rem;
+  }
+
+  .activity-chart__legend-groups {
+    display: grid;
+    gap: 0.9rem;
+    margin-bottom: 1rem;
+  }
+
+  .activity-chart__legend-block {
+    display: grid;
+    gap: 0.35rem;
   }
 
   .chart-legend {
@@ -1670,6 +1723,31 @@
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   }
 
+  .chart-legend__swatch--active,
+  .status-rail__segment--active {
+    background: rgba(99, 255, 180, 0.32);
+  }
+
+  .chart-legend__swatch--idle,
+  .status-rail__segment--idle {
+    background: rgba(255, 215, 107, 0.32);
+  }
+
+  .chart-legend__swatch--inactive,
+  .status-rail__segment--inactive {
+    background: rgba(255, 107, 107, 0.28);
+  }
+
+  .chart-legend__swatch--before,
+  .status-rail__segment--before {
+    background: rgba(160, 174, 192, 0.24);
+  }
+
+  .chart-legend__swatch--after,
+  .status-rail__segment--after {
+    background: rgba(111, 179, 255, 0.28);
+  }
+
   .activity-chart__empty-state {
     border: 1px dashed var(--color-surface-200);
     border-radius: 1rem;
@@ -1679,46 +1757,97 @@
     font-size: 0.92rem;
   }
 
-  .timeline-chart {
+  .market-chart {
+    border: 1px solid var(--color-surface-200);
+    border-radius: 1.1rem;
+    background:
+      radial-gradient(circle at top left, rgba(255, 191, 72, 0.08), transparent 34%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.01)),
+      var(--color-dark);
+    padding: 1rem;
+  }
+
+  .market-chart__frame {
     display: grid;
-    grid-template-columns: 3rem minmax(0, 1fr);
-    gap: 0.75rem;
+    grid-template-columns: 4.4rem minmax(0, 1fr);
+    gap: 0.85rem;
     align-items: start;
   }
 
-  .timeline-chart__axis {
+  .market-chart__axes,
+  .market-chart__timeline {
+    display: grid;
+    grid-template-rows: 16rem 8rem 2.5rem 1.8rem;
+    gap: 0.8rem;
+  }
+
+  .market-chart__axis-block {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    gap: 0.35rem;
+  }
+
+  .market-chart__axis-block--status {
+    grid-template-rows: auto auto;
+    align-content: center;
+  }
+
+  .market-chart__axis-title {
+    margin: 0;
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .market-chart__axis-subtitle {
+    margin: 0;
+    font-size: 0.74rem;
+    line-height: 1.35;
+    color: var(--color-muted);
+  }
+
+  .market-chart__y-axis {
     display: grid;
     grid-template-rows: repeat(4, minmax(0, 1fr));
     align-items: end;
-    height: 15.5rem;
-    padding: 0.35rem 0 1.75rem;
     font-size: 0.74rem;
     color: var(--color-muted);
   }
 
-  .timeline-chart__scroll {
+  .market-chart__axis-footer {
+    display: flex;
+    align-items: flex-start;
+    font-size: 0.74rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    padding-top: 0.2rem;
+  }
+
+  .market-chart__scroll {
     overflow-x: auto;
     padding-bottom: 0.25rem;
   }
 
-  .timeline-chart__columns {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: 1.18rem;
-    gap: 0.3rem;
+  .market-chart__timeline {
+    --bucket-count: 1;
+    --bucket-width: 1rem;
+    --bucket-gap: 0.28rem;
     min-width: max-content;
   }
 
-  .timeline-chart__column {
-    display: grid;
-    grid-template-rows: 14rem 1.5rem;
-    gap: 0.4rem;
+  .market-chart__track {
+    position: relative;
+    border: 1px solid var(--color-surface-200);
+    border-radius: 1rem;
+    overflow: hidden;
+    padding: 0.38rem 0.32rem;
   }
 
-  .timeline-chart__plot {
-    border-radius: 0.95rem;
-    border: 1px solid var(--color-surface-200);
-    background-color: rgba(255, 255, 255, 0.01);
+  .market-chart__track--languages,
+  .market-chart__track--churn {
+    background-color: rgba(255, 255, 255, 0.015);
     background-image: linear-gradient(
       to top,
       rgba(255, 255, 255, 0.09) 0,
@@ -1727,41 +1856,87 @@
       transparent 25%
     );
     background-size: 100% 25%;
-    padding: 0.35rem 0.2rem;
-    display: flex;
+  }
+
+  .market-chart__track--status {
+    background: rgba(255, 255, 255, 0.02);
+    padding: 0.32rem;
+  }
+
+  .market-chart__grid,
+  .market-chart__x-axis {
+    display: grid;
+    grid-template-columns: repeat(var(--bucket-count), minmax(var(--bucket-width), var(--bucket-width)));
+    gap: var(--bucket-gap);
+    min-width: max-content;
+  }
+
+  .market-chart__grid {
+    height: 100%;
+  }
+
+  .market-chart__grid--bars {
+    align-items: end;
+  }
+
+  .market-chart__grid--status {
     align-items: stretch;
   }
 
-  .timeline-chart__stack {
+  .market-chart__slot {
+    position: relative;
+    min-width: 0;
+  }
+
+  .market-chart__slot--active::after {
+    content: "";
+    position: absolute;
+    inset: -0.16rem -0.12rem;
+    border-radius: 0.8rem;
+    border: 1px solid rgba(255, 191, 72, 0.28);
+    background: rgba(255, 191, 72, 0.05);
+    pointer-events: none;
+  }
+
+  .market-chart__stack,
+  .market-chart__status-button {
     width: 100%;
     height: 100%;
-    border-radius: 0.7rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .market-chart__stack {
+    border-radius: 0.75rem;
     display: flex;
     flex-direction: column-reverse;
-    justify-content: flex-start;
     gap: 1px;
-    cursor: default;
-    outline: none;
+    align-items: stretch;
+    cursor: pointer;
     transition:
       transform 120ms ease,
       box-shadow 120ms ease,
       background 120ms ease;
   }
 
-  .timeline-chart__stack:focus-visible,
-  .timeline-chart__stack--active {
+  .market-chart__stack:focus-visible,
+  .market-chart__stack--active,
+  .market-chart__status-button:focus-visible,
+  .market-chart__status-button--active {
     transform: translateY(-2px);
     box-shadow: 0 0 0 1px rgba(255, 191, 72, 0.35);
     background: rgba(255, 191, 72, 0.06);
+    outline: none;
   }
 
-  .timeline-chart__segment {
+  .market-chart__segment {
     width: 100%;
     border-radius: 0.4rem;
     min-height: 0.16rem;
   }
 
-  .timeline-chart__zero {
+  .market-chart__zero {
     width: 100%;
     height: 2px;
     margin-top: auto;
@@ -1769,48 +1944,65 @@
     background: rgba(160, 174, 192, 0.4);
   }
 
-  .timeline-chart__tick {
-    position: relative;
-  }
-
-  .timeline-chart__tick span {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
-    white-space: nowrap;
-    font-size: 0.72rem;
-    color: var(--color-muted);
+  .market-chart__status-button {
+    border-radius: 0.7rem;
   }
 
   .status-rail {
     display: grid;
-    gap: 0.25rem;
+    gap: var(--bucket-gap);
   }
 
   .status-rail__segment {
-    height: 0.65rem;
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 1.55rem;
     border-radius: 999px;
     border: 1px solid transparent;
   }
 
-  .status-rail__segment--active {
-    background: rgba(99, 255, 180, 0.32);
+  .market-chart__panel-note {
+    position: absolute;
+    left: 0.7rem;
+    bottom: 0.55rem;
+    margin: 0;
+    max-width: 20rem;
+    font-size: 0.76rem;
+    line-height: 1.35;
+    color: var(--color-muted);
+    pointer-events: none;
   }
 
-  .status-rail__segment--idle {
-    background: rgba(255, 215, 107, 0.32);
+  .market-chart__x-axis {
+    align-items: start;
+    padding: 0 0.08rem;
   }
 
-  .status-rail__segment--inactive {
-    background: rgba(255, 107, 107, 0.28);
+  .market-chart__tick-slot {
+    position: relative;
+    min-height: 1.7rem;
   }
 
-  .status-rail__segment--before {
-    background: rgba(160, 174, 192, 0.24);
+  .market-chart__tick-slot::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 1px;
+    height: 0.42rem;
+    transform: translateX(-50%);
+    background: rgba(160, 174, 192, 0.36);
   }
 
-  .status-rail__segment--after {
-    background: rgba(111, 179, 255, 0.28);
+  .market-chart__tick-slot span {
+    position: absolute;
+    top: 0.56rem;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 0.7rem;
+    color: var(--color-muted);
   }
 
   .workday-chip {
@@ -1831,25 +2023,51 @@
   }
 
   @media (max-width: 768px) {
-    .timeline-chart {
+    .market-chart {
+      padding: 0.8rem;
+    }
+
+    .market-chart__frame {
       grid-template-columns: 1fr;
     }
 
-    .timeline-chart__axis {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+    .market-chart__axes {
       grid-template-rows: none;
-      height: auto;
-      padding: 0;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.55rem;
       order: 2;
     }
 
-    .timeline-chart__columns {
-      grid-auto-columns: 1rem;
-      gap: 0.25rem;
+    .market-chart__axis-block {
+      grid-template-rows: auto auto auto;
     }
 
-    .timeline-chart__column {
-      grid-template-rows: 11rem 1.35rem;
+    .market-chart__axis-block--status {
+      grid-template-rows: auto auto;
+    }
+
+    .market-chart__y-axis {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-rows: none;
+      align-items: start;
+      gap: 0.4rem;
+    }
+
+    .market-chart__timeline {
+      grid-template-rows: 13rem 6.5rem 2.3rem 1.7rem;
+      --bucket-gap: 0.22rem;
+    }
+
+    .activity-chart__focus-card {
+      width: 100%;
+    }
+
+    .status-rail__segment {
+      min-height: 1.2rem;
+    }
+
+    .market-chart__panel-note {
+      max-width: 13rem;
     }
   }
 </style>

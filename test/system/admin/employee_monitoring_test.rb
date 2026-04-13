@@ -38,35 +38,24 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
     visit admin_employee_monitoring_path(user_id: monitored.id)
 
     within(:xpath, "//h3[contains(., '5-minute activity chart')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
-      assert_button "Adds / Deletes"
-      assert_button "Languages"
+      assert_text "Coding time by language per 5-minute bucket"
       assert_text "Line churn by 5-minute bucket"
       assert_text "PRESENCE STATUS"
+      assert_no_selector ".activity-chart__controls"
 
-      status_rail = find(".status-rail")
-      assert_equal status_rail["data-bucket-count"].to_i, all(".status-rail__segment").count
+      shared_axis = find(".market-chart__x-axis")
+      shared_bucket_count = shared_axis["data-bucket-count"].to_i
+
+      assert_equal shared_bucket_count, all(".market-chart__tick-slot").count
+      assert_equal shared_bucket_count, find("[data-track='languages']")["data-bucket-count"].to_i
+      assert_equal shared_bucket_count, find("[data-track='churn']")["data-bucket-count"].to_i
+      assert_equal shared_bucket_count, find("[data-track='status']")["data-bucket-count"].to_i
+      assert_equal shared_bucket_count, all("[data-track='status'] .status-rail__segment").count
     end
 
     within(:xpath, "//h3[contains(., 'Delivery detail')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
       commits_row = find("span", text: "Commits").find(:xpath, "..")
       assert_equal "1", commits_row.find("strong").text
-    end
-  end
-
-  test "activity chart toggles between churn and language views" do
-    admin = User.create!(timezone: "UTC", admin_level: "admin", github_username: "admin-monitoring-3")
-    monitored = create_monitored_user("toggle-dev")
-
-    sign_in_as(admin)
-    visit admin_employee_monitoring_path(user_id: monitored.id)
-
-    within(:xpath, "//h3[contains(., '5-minute activity chart')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
-      assert_text "Line churn by 5-minute bucket"
-      click_button "Languages"
-      assert_text "Coding time by language per 5-minute bucket"
-      assert_text "ACTIVE LANGUAGES"
-      click_button "Adds / Deletes"
-      assert_text "Line churn by 5-minute bucket"
     end
   end
 
