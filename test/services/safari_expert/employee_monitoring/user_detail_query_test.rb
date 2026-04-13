@@ -65,6 +65,56 @@ class SafariExpert::EmployeeMonitoring::UserDetailQueryTest < ActiveSupport::Tes
     end
   end
 
+  test "fills current-day churn buckets from file-level commit stats when heartbeat deltas are zero" do
+    travel_to Time.utc(2026, 3, 30, 9, 12, 0) do
+      user = User.create!(timezone: "UTC", github_username: "detail-query-commit-fallback")
+      EmployeeMonitoringProfile.for_user(user).save!
+
+      create_heartbeat(user, at: Time.utc(2026, 3, 30, 9, 0, 0))
+      create_heartbeat(user, at: Time.utc(2026, 3, 30, 9, 4, 0))
+
+      Commit.create!(
+        sha: "detail-query-files-sha",
+        user: user,
+        github_raw: {
+          "files" => [
+            {
+              "filename" => "app/models/user.rb",
+              "additions" => 12,
+              "deletions" => 3
+            },
+            {
+              "filename" => "app/services/rollup_builder.rb",
+              "additions" => 8,
+              "deletions" => 2
+            }
+          ],
+          "html_url" => "https://github.com/Safari-Expert/hackatime/commit/detail-query-files-sha",
+          "commit" => {
+            "committer" => {
+              "date" => "2026-03-30T09:03:00Z"
+            }
+          }
+        },
+        created_at: Time.utc(2026, 3, 30, 9, 3, 0),
+        updated_at: Time.utc(2026, 3, 30, 9, 3, 0)
+      )
+
+      payload = SafariExpert::EmployeeMonitoring::UserDetailQuery.new(
+        user: user,
+        now: Time.current
+      ).call
+
+      bucket = payload[:current_day][:timeline_buckets].find { |entry| entry[:bucket_started_at] == "2026-03-30T09:00:00Z" }
+
+      assert_not_nil bucket
+      assert_equal 20, payload[:current_day][:commit_line_additions]
+      assert_equal 5, payload[:current_day][:commit_line_deletions]
+      assert_equal 20, bucket[:line_additions]
+      assert_equal 5, bucket[:line_deletions]
+    end
+  end
+
   private
 
   def create_heartbeat(user, at:, category: "coding", is_write: true, additions: 0, deletions: 0)

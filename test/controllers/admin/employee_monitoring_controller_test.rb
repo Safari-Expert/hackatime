@@ -18,8 +18,8 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
       editor: "VS Code",
       entity: "/app/internal_ui/app/page.tsx",
       is_write: true,
-      line_additions: 12,
-      line_deletions: 3,
+      line_additions: 0,
+      line_deletions: 0,
       source_type: :test_entry
     )
     Heartbeat.create!(
@@ -31,9 +31,35 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
       editor: "VS Code",
       entity: "/app/internal_ui/app/page.tsx",
       is_write: true,
-      line_additions: 8,
-      line_deletions: 2,
+      line_additions: 0,
+      line_deletions: 0,
       source_type: :test_entry
+    )
+    Commit.create!(
+      sha: "controller-monitoring-commit",
+      user: @monitored,
+      github_raw: {
+        "files" => [
+          {
+            "filename" => "app/internal_ui/app/page.tsx",
+            "additions" => 12,
+            "deletions" => 3
+          },
+          {
+            "filename" => "app/internal_ui/app/table.tsx",
+            "additions" => 8,
+            "deletions" => 2
+          }
+        ],
+        "html_url" => "https://github.com/Safari-Expert/internal_ui/commit/controller-monitoring-commit",
+        "commit" => {
+          "committer" => {
+            "date" => (bucket_started_at + 90.seconds).utc.iso8601
+          }
+        }
+      },
+      created_at: bucket_started_at + 90.seconds,
+      updated_at: bucket_started_at + 90.seconds
     )
     sign_in_as(@viewer)
   end
@@ -65,14 +91,14 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
           {
             "language" => "Ruby",
             "coding_seconds" => 90,
-            "line_additions" => 12,
-            "line_deletions" => 3
+            "line_additions" => 0,
+            "line_deletions" => 0
           },
           {
             "language" => "Go",
             "coding_seconds" => 60,
-            "line_additions" => 8,
-            "line_deletions" => 2
+            "line_additions" => 0,
+            "line_deletions" => 0
           }
         ],
         current_bucket["language_breakdown"]

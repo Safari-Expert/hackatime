@@ -37,7 +37,6 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
     travel_to monitoring_reference_time do
       admin = User.create!(timezone: "UTC", admin_level: "admin", github_username: "admin-monitoring-2")
       monitored = create_monitored_user("active-dev")
-      create_commit(monitored, at: 1.minute.ago)
 
       sign_in_as(admin)
       visit admin_employee_monitoring_path(user_id: monitored.id)
@@ -91,7 +90,11 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
 
       within(:xpath, "//h3[contains(., 'Delivery detail')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
         commits_row = find("span", text: "Commits").find(:xpath, "..")
+        commit_additions_row = find("span", text: "Commit additions").find(:xpath, "..")
+        commit_deletions_row = find("span", text: "Commit deletions").find(:xpath, "..")
         assert_equal "1", commits_row.find("strong").text
+        assert_equal "20", commit_additions_row.find("strong").text
+        assert_equal "5", commit_deletions_row.find("strong").text
       end
     end
   end
@@ -117,8 +120,8 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
       editor: "VS Code",
       entity: "/app/internal_ui/app/page.tsx",
       is_write: true,
-      line_additions: 12,
-      line_deletions: 3,
+      line_additions: 0,
+      line_deletions: 0,
       source_type: :test_entry
     )
     Heartbeat.create!(
@@ -130,10 +133,11 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
       editor: "VS Code",
       entity: "/app/internal_ui/app/page.tsx",
       is_write: true,
-      line_additions: 8,
-      line_deletions: 2,
+      line_additions: 0,
+      line_deletions: 0,
       source_type: :test_entry
     )
+    create_commit(user, at: bucket_started_at + 90.seconds)
 
     user
   end
@@ -171,10 +175,18 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
       sha: "system-test-sha-#{SecureRandom.hex(4)}",
       user: user,
       github_raw: {
-        "stats" => {
-          "additions" => 12,
-          "deletions" => 3
-        },
+        "files" => [
+          {
+            "filename" => "app/internal_ui/app/page.tsx",
+            "additions" => 12,
+            "deletions" => 3
+          },
+          {
+            "filename" => "app/internal_ui/app/table.tsx",
+            "additions" => 8,
+            "deletions" => 2
+          }
+        ],
         "html_url" => "https://github.com/Safari-Expert/hackatime/commit/system-test",
         "commit" => {
           "committer" => {

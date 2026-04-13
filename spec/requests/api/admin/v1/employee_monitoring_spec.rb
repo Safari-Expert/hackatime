@@ -16,18 +16,29 @@ RSpec.describe "Api::Admin::V1::EmployeeMonitoring", type: :request do
   let!(:monitored_user) do
     User.create!(timezone: "UTC", username: "monitoring-dev", github_username: "monitoring-dev").tap do |user|
       user.create_employee_monitoring_profile!
-      create_heartbeat(user, 4.minutes.ago, line_additions: 12)
-      create_heartbeat(user, 2.minutes.ago, line_additions: 8)
+      create_heartbeat(user, 4.minutes.ago)
+      create_heartbeat(user, 2.minutes.ago)
       Commit.create!(
         sha: "monitoring-dev-sha",
         user: user,
         github_raw: {
-          "stats" => { "additions" => 20, "deletions" => 4 },
+          "files" => [
+            {
+              "filename" => "app/internal_ui/app/page.tsx",
+              "additions" => 12,
+              "deletions" => 1
+            },
+            {
+              "filename" => "app/internal_ui/app/table.tsx",
+              "additions" => 8,
+              "deletions" => 3
+            }
+          ],
           "html_url" => "https://github.com/Safari-Expert/internal_ui/commit/monitoring-dev-sha",
-          "commit" => { "committer" => { "date" => 90.minutes.ago.utc.iso8601 } }
+          "commit" => { "committer" => { "date" => 2.minutes.ago.utc.iso8601 } }
         },
-        created_at: 90.minutes.ago,
-        updated_at: 90.minutes.ago
+        created_at: 2.minutes.ago,
+        updated_at: 2.minutes.ago
       )
     end
   end
@@ -151,6 +162,14 @@ RSpec.describe "Api::Admin::V1::EmployeeMonitoring", type: :request do
           body = JSON.parse(response.body)
           expect(body["id"]).to eq(monitored_user.id)
           expect(body["current_day"]["commit_count"]).to eq(1)
+          bucket = body["current_day"]["timeline_buckets"].find do |entry|
+            entry["line_additions"].positive? || entry["line_deletions"].positive?
+          end
+          expect(body["current_day"]["commit_line_additions"]).to eq(20)
+          expect(body["current_day"]["commit_line_deletions"]).to eq(4)
+          expect(bucket).not_to be_nil
+          expect(bucket["line_additions"]).to eq(20)
+          expect(bucket["line_deletions"]).to eq(4)
         end
       end
     end

@@ -18,6 +18,15 @@ module SafariExpert
         keyword_init: true
       )
 
+      NormalizedCommit = Struct.new(
+        :sha,
+        :at,
+        :line_additions,
+        :line_deletions,
+        :github_url,
+        keyword_init: true
+      )
+
       def initialize(user:, now: Time.current, local_date: nil, persist: false)
         @user = user
         @now = now
@@ -37,7 +46,7 @@ module SafariExpert
         heartbeats = load_heartbeats(day_range)
         intervals = build_intervals(heartbeats, reference_now, local_date)
         commits = load_commits(day_range)
-        timeline = build_timeline(heartbeats, intervals, window, reference_now, zone, local_date)
+        timeline = build_timeline(heartbeats, intervals, commits, window, reference_now, zone, local_date)
 
         payload = build_payload(
           profile: profile,
@@ -176,6 +185,17 @@ module SafariExpert
       def load_commits(day_range)
         Commit.where(user_id: @user.id, created_at: day_range[:start_at]..day_range[:end_at])
               .order(:created_at)
+              .map do |commit|
+          raw = commit.github_raw || {}
+
+          NormalizedCommit.new(
+            sha: commit.sha,
+            at: commit_time_from_raw(raw, commit.created_at),
+            line_additions: commit_line_total(raw, "additions"),
+            line_deletions: commit_line_total(raw, "deletions"),
+            github_url: raw["html_url"]
+          )
+        end
       end
 
       def build_intervals(heartbeats, reference_now, local_date)
@@ -201,7 +221,7 @@ module SafariExpert
         end
       end
 
-      def build_timeline(heartbeats, intervals, window, reference_now, zone, local_date)
+      def build_timeline(heartbeats, intervals, commits, window, reference_now, zone, local_date)
         default_start =
           if window
             [ window[:start_at] - 60.minutes, zone.local(local_date.year, local_date.month, local_date.day) ].max
@@ -268,6 +288,12 @@ module SafariExpert
             stat = language_stats[bucket_language(heartbeat)]
             stat[:line_additions] += heartbeat.line_additions.to_i
             stat[:line_deletions] += heartbeat.line_deletions.to_i
+          end
+
+          commits_in_bucket = commits.select { |commit| commit.at >= bucket_range_start && commit.at < bucket_range_end }
+          commits_in_bucket.each do |commit|
+            bucket[:line_additions] += commit.line_additions.to_i
+            bucket[:line_deletions] += commit.line_deletions.to_i
           end
 
           bucket[:projects] = bucket[:projects].uniq
@@ -355,21 +381,28 @@ module SafariExpert
       end
 
       def commit_marker(commit)
-        raw = commit.github_raw || {}
-        timestamp =
-          if raw.dig("commit", "committer", "date").present?
-            Time.zone.parse(raw.dig("commit", "committer", "date")).utc
-          else
-            commit.created_at.utc
-          end
-
         {
           sha: commit.sha,
-          timestamp: timestamp.iso8601,
-          additions: raw.dig("stats", "additions").to_i,
-          deletions: raw.dig("stats", "deletions").to_i,
-          github_url: raw["html_url"]
+          timestamp: commit.at.iso8601,
+          additions: commit.line_additions.to_i,
+          deletions: commit.line_deletions.to_i,
+          github_url: commit.github_url
         }
+      end
+
+      def commit_time_from_raw(raw, created_at)
+        if raw.dig("commit", "committer", "date").present?
+          Time.zone.parse(raw.dig("commit", "committer", "date")).utc
+        else
+          created_at.utc
+        end
+      end
+
+      def commit_line_total(raw, field)
+        stats_value = raw.dig("stats", field)
+        return stats_value.to_i if stats_value.present?
+
+        Array(raw["files"]).sum { |file| file[field].to_i }
       end
 
       def coverage_percent_for(intervals, window, reference_now)

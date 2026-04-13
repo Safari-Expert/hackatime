@@ -20,23 +20,13 @@ class SafariExpert::EmployeeMonitoring::RollupBuilderTest < ActiveSupport::TestC
         additions: 0,
         deletions: 0
       )
-      Commit.create!(
-        sha: "rollup-signals-sha",
-        user: user,
-        github_raw: {
-          "stats" => {
-            "additions" => 120,
-            "deletions" => 20
-          },
-          "html_url" => "https://github.com/Safari-Expert/internal_ui/commit/rollup-signals-sha",
-          "commit" => {
-            "committer" => {
-              "date" => "2026-03-30T09:09:00Z"
-            }
-          }
-        },
-        created_at: Time.utc(2026, 3, 30, 9, 9, 0),
-        updated_at: Time.utc(2026, 3, 30, 9, 9, 0)
+      create_commit(
+        user,
+        at: Time.utc(2026, 3, 30, 9, 9, 0),
+        additions: 120,
+        deletions: 20,
+        stats: false,
+        sha: "rollup-signals-sha"
       )
 
       payload = SafariExpert::EmployeeMonitoring::RollupBuilder.new(
@@ -123,6 +113,70 @@ class SafariExpert::EmployeeMonitoring::RollupBuilderTest < ActiveSupport::TestC
       assert_equal 3, snapshot.line_deletions
       assert_equal [ "Unknown", "Ruby" ], snapshot.languages
       assert_equal bucket[:language_breakdown].map(&:deep_stringify_keys), snapshot.language_breakdown
+    end
+  end
+
+  test "uses commit churn in bucket totals when heartbeat deltas are blank" do
+    travel_to Time.utc(2026, 3, 30, 9, 4, 30) do
+      user = User.create!(timezone: "UTC", github_username: "commit-bucket-user")
+      EmployeeMonitoringProfile.for_user(user).save!
+
+      create_heartbeat(
+        user,
+        at: Time.utc(2026, 3, 30, 9, 0, 0),
+        language: "Ruby",
+        additions: 0,
+        deletions: 0
+      )
+      create_heartbeat(
+        user,
+        at: Time.utc(2026, 3, 30, 9, 4, 0),
+        language: "Go",
+        additions: 0,
+        deletions: 0
+      )
+      create_commit(
+        user,
+        at: Time.utc(2026, 3, 30, 9, 3, 0),
+        additions: 20,
+        deletions: 5,
+        stats: false
+      )
+
+      payload = SafariExpert::EmployeeMonitoring::RollupBuilder.new(
+        user: user,
+        now: Time.current,
+        persist: true
+      ).call
+
+      bucket = payload[:timeline_buckets].find { |entry| entry[:bucket_started_at] == "2026-03-30T09:00:00Z" }
+
+      assert_not_nil bucket
+      assert_equal 20, bucket[:line_additions]
+      assert_equal 5, bucket[:line_deletions]
+      assert_equal 20, payload[:commit_line_additions]
+      assert_equal 5, payload[:commit_line_deletions]
+      assert_equal(
+        [
+          {
+            language: "Ruby",
+            coding_seconds: 120,
+            line_additions: 0,
+            line_deletions: 0
+          },
+          {
+            language: "Go",
+            coding_seconds: 30,
+            line_additions: 0,
+            line_deletions: 0
+          }
+        ],
+        bucket[:language_breakdown]
+      )
+
+      snapshot = EmployeeMonitoringIntervalSnapshot.find_by!(user: user, bucket_started_at: Time.utc(2026, 3, 30, 9, 0, 0))
+      assert_equal 20, snapshot.line_additions
+      assert_equal 5, snapshot.line_deletions
     end
   end
 
@@ -236,6 +290,45 @@ class SafariExpert::EmployeeMonitoring::RollupBuilderTest < ActiveSupport::TestC
       is_write: is_write,
       line_additions: additions,
       line_deletions: deletions
+    )
+  end
+
+  def create_commit(user, at:, additions:, deletions:, stats: true, sha: "rollup-commit-#{SecureRandom.hex(4)}")
+    raw = {
+      "html_url" => "https://github.com/Safari-Expert/internal_ui/commit/#{SecureRandom.hex(4)}",
+      "commit" => {
+        "committer" => {
+          "date" => at.utc.iso8601
+        }
+      }
+    }
+
+    if stats
+      raw["stats"] = {
+        "additions" => additions,
+        "deletions" => deletions
+      }
+    else
+      raw["files"] = [
+        {
+          "filename" => "app/models/employee.rb",
+          "additions" => additions - 8,
+          "deletions" => deletions - 2
+        },
+        {
+          "filename" => "app/controllers/employee_controller.rb",
+          "additions" => 8,
+          "deletions" => 2
+        }
+      ]
+    end
+
+    Commit.create!(
+      sha: sha,
+      user: user,
+      github_raw: raw,
+      created_at: at,
+      updated_at: at
     )
   end
 end
