@@ -40,6 +40,11 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
     within(:xpath, "//h3[contains(., '5-minute activity chart')]/ancestor::div[contains(@class, 'rounded-2xl')][1]") do
       assert_button "Adds / Deletes"
       assert_button "Languages"
+      assert_text "Line churn by 5-minute bucket"
+      click_button "Languages"
+      assert_text "Coding time by language per 5-minute bucket"
+      click_button "Adds / Deletes"
+      assert_text "Line churn by 5-minute bucket"
       assert_text "Presence status"
 
       status_rail = find(".status-rail")
