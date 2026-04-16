@@ -35,5 +35,8 @@ class ExternalAttendanceTest < ApplicationSystemTestCase
 
     assert_text "clocked out"
     assert_text "8h"
+    assert_text "Today's session timeline"
+    assert_selector "[data-external-session-timeline][data-session-count='1']"
+    assert_selector "[data-external-session-row]"
   end
 end

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import Button from "../../../../../../app/javascript/components/Button.svelte";
+  import ExternalSessionTimeline from "../../../components/ExternalSessionTimeline.svelte";
 
   type ScheduleDayRow = {
     weekday: number;
@@ -25,6 +26,17 @@
     auto_closed: boolean;
   };
 
+  type TimelineSession = {
+    id: number;
+    started_at: string;
+    ended_at: string | null;
+    display_started_at: string;
+    display_ended_at: string;
+    duration_seconds: number;
+    close_reason: string | null;
+    state: string;
+  };
+
   type UserPayload = {
     id: number;
     display_name: string;
@@ -47,6 +59,16 @@
       week_seconds: number;
       month_seconds: number;
       week_rows: WeekRow[];
+      timeline: {
+        local_date: string;
+        timezone: string;
+        day_start_at: string;
+        day_end_at: string;
+        expected_start_at: string | null;
+        expected_end_at: string | null;
+        session_count: number;
+        sessions: TimelineSession[];
+      };
     };
   };
 
@@ -245,6 +267,10 @@
           {formatDuration(user.attendance.month_seconds)}
         </p>
       </div>
+    </div>
+
+    <div class="rounded-2xl border border-surface-200 bg-surface p-4">
+      <ExternalSessionTimeline timeline={user.attendance.timeline} />
     </div>
 
     <div class="grid gap-4 lg:grid-cols-[minmax(0,1.5fr)_minmax(320px,1fr)]">

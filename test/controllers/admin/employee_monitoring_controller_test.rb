@@ -262,6 +262,8 @@ class Admin::EmployeeMonitoringControllerTest < ActionDispatch::IntegrationTest
       assert_equal "external", inertia_page.dig("props", "selected_user", "account_kind")
       assert_equal "clocked_out", inertia_page.dig("props", "selected_user", "attendance", "state")
       assert_equal 3.hours.to_i, inertia_page.dig("props", "selected_user", "attendance", "today_seconds")
+      assert_equal 1, inertia_page.dig("props", "selected_user", "attendance", "timeline", "session_count")
+      assert_equal 1, inertia_page.dig("props", "selected_user", "attendance", "timeline", "sessions").length
       assert_equal true, inertia_page.dig("props", "overview", "roster").any? { |row| row["id"] == external_user.id && row["account_kind"] == "external" }
       assert_equal 7, inertia_page.dig("props", "selected_user", "schedule", "schedule_days").length
     end

@@ -15,6 +15,9 @@ module SafariExpert
       def call
         raise ArgumentError, "user must be an external collaborator" unless @user.account_kind_external?
 
+        today_row = day_row(local_today)
+        today_range = day_range_for(local_today)
+
         {
           id: @user.id,
           account_kind: @user.account_kind,
@@ -25,10 +28,11 @@ module SafariExpert
           attendance: {
             state: open_session.present? ? "clocked_in" : "clocked_out",
             open_session_started_at: open_session&.started_at&.iso8601,
-            today_seconds: seconds_for_period(day_range_for(local_today)),
+            today_seconds: seconds_for_period(today_range),
             week_seconds: seconds_for_period(range_for_dates(current_week_start, current_week_end)),
             month_seconds: seconds_for_period(range_for_dates(current_month_start, current_month_end)),
-            week_rows: week_rows
+            week_rows: week_rows,
+            timeline: timeline_payload(today_range, today_row)
           }
         }
       end
@@ -111,6 +115,19 @@ module SafariExpert
 
       def week_rows
         (current_week_start..current_week_end).map { |date| day_row(date) }
+      end
+
+      def timeline_payload(day_range, today_row)
+        {
+          local_date: local_today.iso8601,
+          timezone: @timezone,
+          day_start_at: day_range[:start_at].iso8601,
+          day_end_at: day_range[:end_at].iso8601,
+          expected_start_at: today_row[:expected_start_at],
+          expected_end_at: today_row[:expected_end_at],
+          session_count: today_row[:session_count],
+          sessions: sessions_for_range(day_range).map { |session| timeline_session_payload(session, day_range) }
+        }
       end
 
       def day_row(local_date)
@@ -199,6 +216,22 @@ module SafariExpert
 
       def seconds_for_period(range)
         @sessions.sum { |session| overlap_seconds(session, range) }
+      end
+
+      def timeline_session_payload(session, range)
+        display_started_at = [ session.started_at, range[:start_at] ].max
+        display_ended_at = [ session.ended_at || @now, range[:end_at] ].min
+
+        {
+          id: session.id,
+          started_at: session.started_at.iso8601,
+          ended_at: session.ended_at&.iso8601,
+          display_started_at: display_started_at.iso8601,
+          display_ended_at: display_ended_at.iso8601,
+          duration_seconds: overlap_seconds(session, range),
+          close_reason: session.close_reason,
+          state: session.open_session? ? "open" : "closed"
+        }
       end
 
       def overlap_seconds(session, range)

@@ -56,6 +56,8 @@ class Admin::EmployeeMonitoringTest < ApplicationSystemTestCase
       assert_text "Current week"
       assert_text "External Worker"
       assert_text "EXTERNAL"
+      assert_text "Today's session timeline"
+      assert_selector "[data-external-session-timeline][data-session-count='1']"
       assert_no_text "5-minute activity chart"
     end
   end

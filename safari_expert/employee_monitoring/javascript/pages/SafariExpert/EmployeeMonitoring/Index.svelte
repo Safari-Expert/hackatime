@@ -2,6 +2,7 @@
   import { Link } from "@inertiajs/svelte";
   import { onMount } from "svelte";
   import Button from "../../../../../../app/javascript/components/Button.svelte";
+  import ExternalSessionTimeline from "../../../components/ExternalSessionTimeline.svelte";
 
   type Summary = {
     monitored_users: number;
@@ -144,6 +145,17 @@
     auto_closed: boolean;
   };
 
+  type ExternalTimelineSession = {
+    id: number;
+    started_at: string;
+    ended_at: string | null;
+    display_started_at: string;
+    display_ended_at: string;
+    duration_seconds: number;
+    close_reason: string | null;
+    state: string;
+  };
+
   type SelectedUser = {
     id: number;
     account_kind: string;
@@ -178,6 +190,16 @@
       week_seconds: number;
       month_seconds: number;
       week_rows: ExternalAttendanceWeekRow[];
+      timeline: {
+        local_date: string;
+        timezone: string;
+        day_start_at: string;
+        day_end_at: string;
+        expected_start_at: string | null;
+        expected_end_at: string | null;
+        session_count: number;
+        sessions: ExternalTimelineSession[];
+      };
     };
     trend_14d: Trend;
     trend_30d: Trend;
@@ -1100,6 +1122,12 @@
             </div>
 
             <div class="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(320px,1fr)]">
+              <div class="rounded-2xl border border-surface-200 bg-surface p-4">
+                {#if selected_user.attendance?.timeline}
+                  <ExternalSessionTimeline timeline={selected_user.attendance.timeline} />
+                {/if}
+              </div>
+
               <div class="rounded-2xl border border-surface-200 bg-surface p-4">
                 <h3 class="m-0 text-lg font-semibold text-surface-content">
                   Current week

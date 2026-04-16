@@ -43,4 +43,44 @@ class SafariExpert::EmployeeMonitoring::ExternalAttendanceQueryTest < ActiveSupp
       assert_equal "not_clocked_out", tuesday_row[:hours_status]
     end
   end
+
+  test "returns individual same-day session spans for the attendance timeline" do
+    user = User.create!(
+      timezone: "UTC",
+      account_kind: :external,
+      display_name_override: "Session Timeline Worker",
+      username: "session-timeline",
+      password: "supersecure123"
+    )
+    user.create_employee_monitoring_profile!
+
+    user.external_work_sessions.create!(
+      started_at: Time.utc(2026, 4, 13, 9, 0, 0),
+      ended_at: Time.utc(2026, 4, 13, 12, 0, 0),
+      close_reason: :user_clock_out
+    )
+    user.external_work_sessions.create!(
+      started_at: Time.utc(2026, 4, 13, 13, 30, 0),
+      ended_at: Time.utc(2026, 4, 13, 17, 15, 0),
+      close_reason: :user_clock_out
+    )
+
+    travel_to Time.utc(2026, 4, 13, 18, 0, 0) do
+      payload = SafariExpert::EmployeeMonitoring::ExternalAttendanceQuery.new(user: user, now: Time.current).call
+      timeline = payload.dig(:attendance, :timeline)
+      sessions = timeline[:sessions]
+
+      assert_equal 2, timeline[:session_count]
+      assert_equal 2, sessions.length
+      assert_equal 6.hours + 45.minutes, payload.dig(:attendance, :today_seconds)
+      assert_equal "2026-04-13T00:00:00Z", timeline[:day_start_at]
+      assert_equal "2026-04-14T00:00:00Z", timeline[:day_end_at]
+      assert_equal Time.utc(2026, 4, 13, 9, 0, 0).iso8601, sessions.first[:started_at]
+      assert_equal Time.utc(2026, 4, 13, 12, 0, 0).iso8601, sessions.first[:ended_at]
+      assert_equal 3.hours, sessions.first[:duration_seconds]
+      assert_equal Time.utc(2026, 4, 13, 13, 30, 0).iso8601, sessions.last[:display_started_at]
+      assert_equal Time.utc(2026, 4, 13, 17, 15, 0).iso8601, sessions.last[:display_ended_at]
+      assert_equal "closed", sessions.last[:state]
+    end
+  end
 end
